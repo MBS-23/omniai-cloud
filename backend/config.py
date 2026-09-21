@@ -188,6 +188,27 @@ class Settings:
             return Path(tempfile.gettempdir()) / "omniai_logs"
         return self.project_root / "logs"
 
+    def setup_hint(self) -> str:
+        """What is missing for this deployment to serve requests, and where to set it.
+
+        Written for whoever reads the health endpoint or the page banner, so it
+        names the host's own settings screen rather than a file that does not
+        exist on a serverless platform.
+        """
+        if self.profile != "lite":
+            return "The local models are not available. Run `python -m backend.models.download_models`."
+
+        variable = (
+            "OMNIAI_GEMINI_API_KEY" if self.hosted_provider == "gemini" or not self.mistral.configured
+            else "OMNIAI_MISTRAL_API_KEY"
+        )
+        where = (
+            "in the Vercel dashboard under Project, Settings, Environment Variables, then redeploy"
+            if os.getenv("VERCEL") else
+            "in your .env file, then restart"
+        )
+        return f"No model API key is configured. Set {variable} {where}."
+
     def describe(self) -> dict[str, object]:
         """Non-secret summary, safe to log and to expose on /api/health."""
         return {

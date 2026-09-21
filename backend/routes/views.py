@@ -26,6 +26,7 @@ def home() -> str:
         profile=settings.profile,
         backend_name=backend.name,
         backend_ready=bool(backend.capabilities()),
+        setup_hint=settings.setup_hint(),
         species_count=SPECIES_COUNT,
         max_upload_mb=round(settings.limits.max_upload_bytes / (1024 * 1024)),
         max_text_chars=settings.limits.max_text_chars,

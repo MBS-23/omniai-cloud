@@ -265,8 +265,5 @@ def health() -> Any:
         "capabilities": sorted(backend.capabilities()),
     }
     if not ready:
-        payload["detail"] = (
-            "No Mistral API key is configured, so the lite profile cannot serve "
-            "requests. Set OMNIAI_MISTRAL_API_KEY in your .env file."
-        )
+        payload["detail"] = settings.setup_hint()
     return jsonify(payload), (200 if ready else 503)
