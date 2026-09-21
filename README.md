@@ -9,6 +9,9 @@ every decision it made along the way.
 Department of Artificial Intelligence and Machine Learning,
 Sasi Institute of Technology and Engineering.
 
+**Live:** <https://omniai-cloud.vercel.app> (the `lite` profile on Gemini).
+Check what it is running with [`/api/health`](https://omniai-cloud.vercel.app/api/health).
+
 ---
 
 ## Quick start
@@ -18,35 +21,38 @@ python -m venv .venv
 ```
 
 Activate it (`.venv\Scripts\activate` on Windows, `source .venv/bin/activate`
-elsewhere), then:
+elsewhere). Then pick a profile.
+
+**Everything on this machine, no API key** (the `offline` profile, the default):
+
+```bash
+pip install -r requirements/offline.txt
+```
+
+```bash
+python -m backend.models.download_models
+```
+
+**Or a light install that calls a hosted model** (the `lite` profile, what the
+live site runs):
 
 ```bash
 pip install -r requirements/lite.txt
 ```
 
-Copy the environment template and add your API key:
+Copy `.env.example` to `.env`, set `OMNIAI_PROFILE=lite`, and set
+`OMNIAI_GEMINI_API_KEY` to a key from
+[aistudio.google.com/apikey](https://aistudio.google.com/apikey).
 
-```bash
-cp .env.example .env
-```
-
-Set `OMNIAI_MISTRAL_API_KEY` in `.env` to a key from
-[console.mistral.ai](https://console.mistral.ai/api-keys), then run:
+Either way, run:
 
 ```bash
 python -m backend.main
 ```
 
-Open <http://127.0.0.1:8000>.
-
-> **Check your key can actually do inference.** A key that lists models is not
-> necessarily allowed to call them. If chat requests return `429` while
-> `/v1/ocr` returns `200`, the key is valid but its chat quota is exhausted or
-> not yet enabled — check limits and billing in the Mistral console.
-
-```bash
-curl -s -o /dev/null -w "%{http_code}\n" -X POST https://api.mistral.ai/v1/chat/completions -H "Authorization: Bearer $OMNIAI_MISTRAL_API_KEY" -H "Content-Type: application/json" -d '{"model":"mistral-small-latest","messages":[{"role":"user","content":"hi"}],"max_tokens":5}'
-```
+Open <http://127.0.0.1:8000>. `GET /api/health` reports the active profile and
+capabilities; it answers `503` with a plain-language `detail` when something is
+missing.
 
 ---
 
@@ -57,7 +63,7 @@ run under every profile. Only model execution differs.
 
 | | `offline` (default) | `lite` | `full` |
 |---|---|---|---|
-| Where models run | **This machine** | Mistral API | This machine |
+| Where models run | **This machine** | Gemini API (or Mistral) | This machine |
 | API key | **not required** | required | not required |
 | Rate limits | **none** | yes, per key | none |
 | Python | 3.11 to 3.14 | 3.11 to 3.14 | 3.11 only |
@@ -65,7 +71,7 @@ run under every profile. Only model execution differs.
 | Cold start | 20-30 s warmup | under a second | 60-90 s |
 | Bounding boxes | **yes, from DETR** | not available | yes, from YOLO |
 | Works without internet | **yes** | no | yes |
-| Deployable to ordinary hosting | no | yes | no |
+| Deployable to ordinary hosting | no | **yes, incl. Vercel** | no |
 
 Switch with `OMNIAI_PROFILE` in `.env`.
 
@@ -98,17 +104,20 @@ Scanned PDFs additionally need [Poppler](https://poppler.freedesktop.org/) on
 
 ## Models
 
-| Capability | `offline` | `lite` | `full` |
+| Capability | `offline` | `lite` (Gemini) | `full` |
 |---|---|---|---|
-| Image classification | `microsoft/resnet-50` | Mistral vision, 2-model ensemble | ResNet50 |
-| Object detection | `facebook/detr-resnet-50` | Mistral vision (no boxes) | YOLOv8n |
-| Wildlife detection | DETR at a lower threshold | Mistral vision | YOLOv8x |
-| Text extraction | EasyOCR (CRAFT + CRNN) | `mistral-ocr-latest` | PaddleOCR |
-| Captioning | `blip-image-captioning-base` | Mistral vision | BLIP large |
-| Translation | `nllb-200-distilled-600M` | Mistral | NLLB-200 |
-| Sentiment | `twitter-roberta-base-sentiment` | Mistral | RoBERTa |
-| Entities | `dslim/bert-base-NER` | Mistral | spaCy |
-| Summarisation | `distilbart-cnn-12-6` | Mistral | Mistral |
+| Image classification | `microsoft/resnet-50` | `gemini-3.6-flash` + `gemini-3.5-flash-lite` ensemble | ResNet50 |
+| Object detection | `facebook/detr-resnet-50` | `gemini-3.6-flash` (no boxes) | YOLOv8n |
+| Wildlife detection | DETR at a lower threshold | `gemini-3.6-flash`, species-focused | YOLOv8x |
+| Text extraction | EasyOCR (CRAFT + CRNN) | `gemini-3.1-flash-lite`, whole PDFs natively | PaddleOCR |
+| Captioning | `blip-image-captioning-base` | `gemini-3.6-flash` | BLIP large |
+| Translation | `nllb-200-distilled-600M` | `gemini-3.6-flash` | NLLB-200 |
+| Sentiment | `twitter-roberta-base-sentiment` | `gemini-3.6-flash` | RoBERTa |
+| Entities | `dslim/bert-base-NER` | `gemini-3.6-flash` | spaCy |
+| Summarisation | `distilbart-cnn-12-6` | `gemini-3.6-flash` | Mistral |
+
+`lite` falls back to Mistral (`mistral-medium-latest`, `mistral-ocr-latest`)
+when only a Mistral key is set, or when `OMNIAI_HOSTED_PROVIDER=mistral`.
 
 DETR emits COCO class names, so the label-refinement step described in the
 paper applies unchanged in the `offline` profile — and unlike the hosted
@@ -121,7 +130,7 @@ and selecting a model a key cannot reach fails every request.
 
 In `lite`, two vision models classify each image concurrently. When they agree
 the answer is corroborated and confidence is raised; when they disagree a
-reasoning model looks at the image and settles it. The interface shows which
+reasoning model (`gemini-3.8-flash`) looks at the image and settles it. The interface shows which
 models ran, what each said, and how a disagreement was resolved.
 
 This is the same principle as label refinement: combine independent opinions
@@ -156,9 +165,10 @@ faster and more specific than running every model on every input:
   has the content, and a caption model given a page of text produces a garbled
   paraphrase of the words it can partly read. On a document image this cuts
   end-to-end time from about 50 s to 30 s.
-- **Animals re-route.** When the classifier reports a species, detection moves
-  from YOLOv8n to YOLOv8x and OCR is skipped, since wildlife photographs carry
-  no readable text.
+- **Animals re-route.** When the classifier reports a species, detection
+  switches to its wildlife setting (YOLOv8x in `full`, DETR at a lower
+  threshold in `offline`, a species-focused prompt in `lite`) and OCR is
+  skipped, since wildlife photographs carry no readable text.
 - **Labels are refined.** COCO calls every big cat `cat` and every antelope
   `cow`. The classifier's species label replaces the coarse one on the primary
   subject only, and the interface shows what changed.
@@ -196,10 +206,10 @@ pip install -r requirements/dev.txt
 python -m pytest
 ```
 
-88 tests against a scripted backend: no API key, no GPU, no weights. Covers
-routing, label refinement, upload validation, rate limiting, security headers,
-secret redaction, the SSE contract, and static checks on the stylesheet and
-template.
+127 tests against a scripted backend: no API key, no GPU, no weights. Covers
+routing, label refinement, the classification ensemble, profile and key
+resolution, upload validation, rate limiting, security headers, secret
+redaction, the SSE contract, and static checks on the stylesheet and template.
 
 ---
 
@@ -221,12 +231,19 @@ to reconcile it with the paper's published figures.
 
 ## Deployment
 
+**Vercel** (how the live site runs): every push to `main` redeploys. The one
+setting it needs is `OMNIAI_GEMINI_API_KEY`, added under Project, Settings,
+Environment Variables with **Production** ticked, followed by a redeploy.
+
+**Docker**, anywhere else:
+
 ```bash
 docker compose up --build
 ```
 
-See [docs/deployment.md](docs/deployment.md) for hosting options, the
-single-worker rate-limit caveat, and what to change before going public.
+See [docs/deployment.md](docs/deployment.md) for hosting options, a
+troubleshooting table for a site stuck on "degraded", the single-worker
+rate-limit caveat, and what to change before going public.
 
 ---
 
@@ -258,5 +275,5 @@ single-worker rate-limit caveat, and what to change before going public.
 Academic project. The pretrained models carry their own licences: ResNet50 and
 YOLOv8 (AGPL-3.0 for Ultralytics), BLIP (BSD-3-Clause), NLLB-200
 (CC-BY-NC-4.0, **non-commercial**), PaddleOCR (Apache-2.0). NLLB's
-non-commercial clause applies to the `full` profile; check it before any
-commercial deployment.
+non-commercial clause applies to the `offline` and `full` profiles; check it
+before any commercial deployment.

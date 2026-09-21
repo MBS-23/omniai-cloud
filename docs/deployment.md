@@ -14,9 +14,11 @@ locally, or on a GPU VM you control.
 
 ## Before you deploy
 
-1. **Rotate the API key.** Generate a fresh one at
-   [console.mistral.ai](https://console.mistral.ai/api-keys). Set it as a
-   platform secret, never in the repository.
+1. **Use a fresh API key.** Generate one at
+   [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (or
+   [console.mistral.ai](https://console.mistral.ai/api-keys) for Mistral). A key
+   that has ever been pasted into a chat, an issue or a commit should be
+   replaced. Set it as a platform secret, never in the repository.
 2. **Confirm `.env` is ignored.** `git check-ignore .env` should print `.env`.
 3. **Set `OMNIAI_DEBUG=false`.** It defaults to false; confirm it anyway.
 4. **Set a rate limit** you are willing to pay for. Every request in `lite` is a
@@ -65,12 +67,39 @@ profile, and writes uploads under `/tmp`. The only thing it needs from you:
 |---|---|
 | `OMNIAI_GEMINI_API_KEY` | a key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 
-Set it in the Vercel dashboard under **Project → Settings → Environment
-Variables**, for Production and Preview, then redeploy. Never commit it.
+`GEMINI_API_KEY` and `GOOGLE_API_KEY` are accepted as alternative names.
 
-To deploy: open [vercel.com/new](https://vercel.com/new), import the
-repository, add the variable above before the first deploy, and deploy.
+1. Open the project in the Vercel dashboard, then **Settings → Environment
+   Variables**.
+2. **Key** `OMNIAI_GEMINI_API_KEY`, **Value** the key itself, with no quotes
+   and no spaces.
+3. Under **Environments**, tick **Production** (the live URL). Tick Preview and
+   Development too if you use them.
+4. **Save**.
+5. **Redeploy.** Vercel reads variables when a deployment is built, so a
+   running deployment never sees a variable added after it. Go to
+   **Deployments**, open the latest, **⋯ → Redeploy**, or push any commit to
+   `main`.
+6. Open `/api/health` on the live URL. It should say `"status": "ok"` and
+   `"hosted_provider": "gemini"`.
+
+Never commit the key.
+
+To deploy from scratch: open [vercel.com/new](https://vercel.com/new), import
+the repository, add the variable above before the first deploy, and deploy.
 Every later push to `main` redeploys automatically.
+
+#### When the live site says "degraded"
+
+While no key is configured, `/api/health` answers `503` and includes a
+`diagnostics` block. It lists variable **names** only, never values:
+
+| What `/api/health` shows | What it means | Fix |
+|---|---|---|
+| a name under `set_but_empty` | the variable exists in this environment, but its value is blank | edit it, paste the key, save, redeploy |
+| a name under `similar_names_found` | a variable with a near-miss name, such as `GEMINI_KEY` | rename it to `OMNIAI_GEMINI_API_KEY`, redeploy |
+| both lists empty | no key variable reaches this deployment at all | the variable was saved for Preview or Development only, saved on a different Vercel project, or added after this deployment was built. Tick Production and redeploy |
+| `status: ok`, but every analysis fails | the key is present but Google rejects it (revoked, mistyped, or its project lacks access) | the result panel quotes Gemini's error; create a new key at aistudio.google.com and replace the value |
 
 Progress still streams, but the whole analysis must finish inside the
 60-second function limit. Image analysis with the ensemble makes three or four
@@ -83,7 +112,7 @@ fly launch --no-deploy
 ```
 
 ```bash
-fly secrets set OMNIAI_MISTRAL_API_KEY=your-key-here
+fly secrets set OMNIAI_PROFILE=lite OMNIAI_GEMINI_API_KEY=your-key-here
 ```
 
 ```bash
@@ -135,9 +164,10 @@ or drop that branch in `client_identifier`.
 ## Operating it
 
 Health: `GET /api/health` returns `200` when a backend can serve requests and
-`503` when it cannot — an invalid or missing key shows as `503` with
-`status: degraded`. It reports the profile, the capability list and the upload
-limit. It never reports the key.
+`503` when it cannot. A missing key shows as `503` with `status: degraded`, a
+`detail` saying what to set and where, and the `diagnostics` block described
+under *Vercel*. It reports the profile, the provider, the capability list and
+the upload limit. It never reports a key.
 
 Logs go to stdout, and to `logs/omniai.log` when that directory is writable. In
 a read-only container only stdout is used, which is what platform log collectors
@@ -149,7 +179,10 @@ killed mid-request.
 
 ## Cost
 
-Every `lite` request is billed by Mistral. A text analysis is one or two calls;
-an image analysis is three or four; a scanned PDF is one OCR call per page up to
-30 pages. The rate limit is the main cost control — set it deliberately, and
-consider putting the deployment behind authentication if the URL is public.
+Every `lite` request is a call against your provider's quota. A text analysis
+is one or two calls; an image analysis is three or four with the ensemble; a
+scanned PDF is one call for the whole document on Gemini, or one OCR call per
+page (up to 30) on Mistral. Gemini's free tier covers a demo; past that, usage
+is billed to the Google Cloud project behind the key. The rate limit is the
+main cost control. Set it deliberately, and consider putting the deployment
+behind authentication if the URL is public.
