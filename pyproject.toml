@@ -1,0 +1,6 @@
+# Deployment metadata only. Dependencies live in requirements/, so the
+# heavyweight offline stack (torch, transformers) can never be pulled into a
+# serverless build by accident.
+
+[tool.vercel]
+entrypoint = "backend.main:app"

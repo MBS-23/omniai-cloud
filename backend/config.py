@@ -19,6 +19,7 @@ Two runtime profiles are supported:
 from __future__ import annotations
 
 import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -36,6 +37,7 @@ Profile = Literal["offline", "full", "lite"]
 _LEGACY_ALIASES = {
     "OMNIAI_MISTRAL_API_KEY": "MISTRAL_API_KEY",
     "OMNIAI_PROFILE": "PROFILE",
+    "OMNIAI_GEMINI_API_KEY": "GEMINI_API_KEY",
 }
 
 
@@ -105,6 +107,27 @@ class MistralSettings:
 
 
 @dataclass(frozen=True)
+class GeminiSettings:
+    """Credentials and model IDs for the hosted Gemini backend.
+
+    Defaults are current as of the 3.x model line. The 2.0 models are shut
+    down, so pin nothing older than 3.x here.
+    """
+
+    api_key: str | None
+    model: str = "gemini-3.6-flash"
+    # A cheaper second opinion for the classification ensemble.
+    fast_model: str = "gemini-3.5-flash-lite"
+    # Settles disagreements between the two.
+    reasoning_model: str = "gemini-3.8-flash"
+    timeout_seconds: int = 60
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.api_key)
+
+
+@dataclass(frozen=True)
 class Limits:
     """Hard ceilings applied to every request, before any model runs."""
 
@@ -124,6 +147,9 @@ class Settings:
     cors_origins: list[str]
     limits: Limits
     mistral: MistralSettings
+    gemini: GeminiSettings
+    # Which hosted API serves the lite profile: "gemini" or "mistral".
+    hosted_provider: str
     model_dir: Path
     poppler_path: str | None
     torch_device: str
@@ -139,11 +165,21 @@ class Settings:
         return self.profile in {"offline", "full"}
 
     @property
+    def serverless(self) -> bool:
+        """True on a platform whose code directory is read-only (Vercel)."""
+        return bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+
+    @property
     def upload_dir(self) -> Path:
+        # Serverless functions may write only under /tmp.
+        if self.serverless:
+            return Path(tempfile.gettempdir()) / "omniai_uploads"
         return self.project_root / "temp_uploads"
 
     @property
     def log_dir(self) -> Path:
+        if self.serverless:
+            return Path(tempfile.gettempdir()) / "omniai_logs"
         return self.project_root / "logs"
 
     def describe(self) -> dict[str, object]:
@@ -152,6 +188,8 @@ class Settings:
             "profile": self.profile,
             "debug": self.debug,
             "mistral_configured": self.mistral.configured,
+            "gemini_configured": self.gemini.configured,
+            "hosted_provider": self.hosted_provider if self.profile == "lite" else None,
             "torch_device": self.torch_device,
             "max_upload_mb": round(self.limits.max_upload_bytes / (1024 * 1024), 1),
         }
@@ -165,12 +203,29 @@ def _resolve_profile() -> Profile:
     full    : the original PyTorch + PaddleOCR stack. Needs Python 3.11.
     lite    : models served by the Mistral API. Smallest install, deployable.
     """
-    raw = _str("OMNIAI_PROFILE", "offline").lower()
+    # On a serverless host there is nowhere to keep 10 GB of weights, so the
+    # hosted profile is the only one that can start. Default to it there, so a
+    # missing environment variable cannot take the site down.
+    serverless = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+    raw = _str("OMNIAI_PROFILE", "lite" if serverless else "offline").lower()
     if raw in {"offline", "local"}:
         return "offline"
     if raw == "full":
         return "full"
     return "lite"
+
+
+def _resolve_hosted_provider() -> str:
+    """Pick the API behind the lite profile.
+
+    An explicit OMNIAI_HOSTED_PROVIDER wins. Otherwise prefer Gemini when a
+    Gemini key is present, since that is what the public deployment uses, and
+    fall back to Mistral.
+    """
+    explicit = (_raw("OMNIAI_HOSTED_PROVIDER") or "").lower()
+    if explicit in {"gemini", "mistral"}:
+        return explicit
+    return "gemini" if _raw("OMNIAI_GEMINI_API_KEY") else "mistral"
 
 
 def _build_settings() -> Settings:
@@ -200,6 +255,13 @@ def _build_settings() -> Settings:
             fast_model=_str("OMNIAI_MISTRAL_FAST_MODEL", "mistral-small-latest"),
             ensemble=_bool("OMNIAI_ENSEMBLE", True),
         ),
+        gemini=GeminiSettings(
+            api_key=_raw("OMNIAI_GEMINI_API_KEY"),
+            model=_str("OMNIAI_GEMINI_MODEL", "gemini-3.6-flash"),
+            fast_model=_str("OMNIAI_GEMINI_FAST_MODEL", "gemini-3.5-flash-lite"),
+            reasoning_model=_str("OMNIAI_GEMINI_REASONING_MODEL", "gemini-3.8-flash"),
+        ),
+        hosted_provider=_resolve_hosted_provider(),
         model_dir=model_dir,
         poppler_path=_raw("OMNIAI_POPPLER_PATH"),
         torch_device=_str("OMNIAI_TORCH_DEVICE", "auto").lower(),

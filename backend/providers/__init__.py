@@ -32,6 +32,12 @@ def build_backend(settings: Settings | None = None) -> Backend:
         logger.info("Backend: local (full profile)")
         return LocalBackend(settings)
 
+    if settings.hosted_provider == "gemini":
+        from backend.providers.gemini import GeminiBackend
+
+        logger.info("Backend: gemini (lite profile)")
+        return GeminiBackend(settings)
+
     from backend.providers.remote import RemoteBackend
 
     logger.info("Backend: mistral (lite profile)")

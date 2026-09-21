@@ -81,6 +81,14 @@ def process_document(document_path: str, backend: Backend) -> dict[str, Any]:
                 document_type = "Scanned or image-based PDF"
                 extraction_method = f"OCR via {backend.name}"
                 ocr_used = bool(blocks)
+            elif source_type == "scanned_pdf" and hasattr(backend, "extract_text_from_pdf"):
+                # No local rasteriser (normal on serverless hosts), but this
+                # backend can read a whole PDF itself, so hand it over.
+                ocr_result = backend.extract_text_from_pdf(document_path)
+                extracted_text = ocr_result.get("text", "") if ocr_result.get("has_text") else ""
+                document_type = "Scanned or image-based PDF"
+                extraction_method = f"Whole-document OCR via {backend.name}"
+                ocr_used = bool(extracted_text)
             elif source_type == "scanned_pdf":
                 document_type = "Scanned or image-based PDF"
                 extraction_method = (

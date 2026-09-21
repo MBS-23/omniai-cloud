@@ -1,0 +1,6 @@
+# What a serverless host installs. This is the lite profile: the hosted
+# Gemini or Mistral backend, with no PyTorch and no model weights.
+#
+# For local use with every model on this machine, install
+# requirements/offline.txt instead.
+-r requirements/lite.txt

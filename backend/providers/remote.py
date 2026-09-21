@@ -8,8 +8,6 @@ such case -- the result says so explicitly rather than inventing coordinates.
 
 from __future__ import annotations
 
-import re
-import threading
 from pathlib import Path
 from typing import Any
 
@@ -90,35 +88,6 @@ def _clamp_confidence(value: Any, default: float = 0.0) -> float:
     return round(max(0.0, min(100.0, number)), 2)
 
 
-# Words that carry no discriminating power when comparing two labels.
-_LABEL_NOISE = frozenset({
-    "a", "an", "the", "photo", "picture", "image", "of", "close", "up",
-    "closeup", "shot", "view",
-})
-
-
-def _label_tokens(label: str) -> set[str]:
-    return {
-        word
-        for word in re.split(r"[^a-z0-9]+", (label or "").lower())
-        if word and word not in _LABEL_NOISE
-    }
-
-
-def _labels_agree(first: str, second: str) -> bool:
-    """True when two model labels name the same thing.
-
-    Exact string equality is too strict: one model says "african elephant",
-    the other "elephant", and they plainly agree. One label containing all of
-    the other's meaningful words is treated as agreement, which also makes the
-    more specific of the two the natural winner.
-    """
-    a, b = _label_tokens(first), _label_tokens(second)
-    if not a or not b:
-        return False
-    return a.issubset(b) or b.issubset(a)
-
-
 def _detect_language(text: str) -> str:
     from langdetect import detect
 
@@ -182,95 +151,25 @@ class RemoteBackend(Backend):
         }
 
     def classify_image(self, image_path: str) -> Classification:
-        """Classify the subject, optionally using two models and an adjudicator.
-
-        This is the same idea as the label-refinement step: rather than
-        fine-tuning, combine independent opinions. Two vision models classify
-        the image concurrently. When they agree the answer is corroborated and
-        confidence is raised; when they disagree a reasoning model looks at the
-        image and decides, which is where most of the accuracy gain comes from.
-
-        Set OMNIAI_ENSEMBLE=false to fall back to a single call.
-        """
-        primary_model = self._settings.mistral.vision_model
-
-        # A second opinion costs a second call. When the key is already being
-        # rate limited, one good answer beats three failed ones.
+        """Classify with two models and an adjudicator; see providers.ensemble."""
+        from backend.providers.ensemble import run_ensemble
         from backend.providers.mistral_client import rate_limited
 
+        primary_model = self._settings.mistral.vision_model
+
+        # A second opinion costs a second call. While the key is being rate
+        # limited, one good answer beats three failed ones.
         if not self._settings.mistral.ensemble or rate_limited():
             result = self._classify_once(image_path, primary_model)
             result["ensemble"] = {"agreement": "single", "models": [primary_model]}
             return result
 
-        second_model = self._settings.mistral.fast_model
-        results: dict[str, Any] = {}
-
-        def run(name: str, model: str) -> None:
-            try:
-                results[name] = self._classify_once(image_path, model)
-            except Exception as error:  # noqa: BLE001 - recorded, not swallowed
-                results[name] = error
-
-        # Two independent opinions, fetched concurrently so the ensemble costs
-        # latency only for the adjudication step, not for the second call.
-        threads = [
-            threading.Thread(target=run, args=("primary", primary_model)),
-            threading.Thread(target=run, args=("second", second_model)),
-        ]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join(timeout=self._settings.mistral.timeout_seconds + 5)
-
-        primary = results.get("primary")
-        second = results.get("second")
-
-        # If the primary failed there is nothing to build on.
-        if isinstance(primary, Exception) or primary is None:
-            if isinstance(second, dict):
-                second["ensemble"] = {"agreement": "primary_failed", "models": [second_model]}
-                return second
-            raise primary if isinstance(primary, Exception) else BackendUnavailable(
-                "Image classification did not return a result."
-            )
-
-        if not isinstance(second, dict):
-            primary["ensemble"] = {"agreement": "single", "models": [primary_model]}
-            return primary
-
-        if _labels_agree(primary["label"], second["label"]):
-            # Corroborated. Take the more specific label and lift confidence,
-            # capped so a wrong-but-agreeing pair never reads as certain.
-            specific = max((primary, second), key=lambda r: len(r["label"]))
-            agreed = dict(specific)
-            agreed["confidence"] = round(
-                min(99.0, max(primary["confidence"], second["confidence"]) + 4.0), 2
-            )
-            agreed["ensemble"] = {
-                "agreement": "agreed",
-                "models": [primary_model, second_model],
-                "labels": [primary["label"], second["label"]],
-            }
-            return agreed  # type: ignore[return-value]
-
-        return self._adjudicate(image_path, primary, second, primary_model, second_model)
-
-    def _adjudicate(
-        self,
-        image_path: str,
-        primary: Classification,
-        second: Classification,
-        primary_model: str,
-        second_model: str,
-    ) -> Classification:
-        """Break a disagreement with a reasoning model."""
-        try:
+        def adjudicate(first: Classification, second: Classification) -> dict[str, Any]:
             verdict = self._client.chat_json(
                 system=_ADJUDICATE_SYSTEM,
                 user=(
                     "Two classifiers disagree about the main subject of this image.\n"
-                    f"Classifier A says: {primary['label']}\n"
+                    f"Classifier A says: {first['label']}\n"
                     f"Classifier B says: {second['label']}\n"
                     "Look at the image and decide. You may return a third label "
                     "if both are wrong."
@@ -279,32 +178,17 @@ class RemoteBackend(Backend):
                 model=self._settings.mistral.reasoning_model,
                 max_tokens=400,
             )
-        except Exception as error:
-            logger.warning("Adjudication unavailable, keeping the primary answer: %s", error)
-            primary = dict(primary)  # type: ignore[assignment]
-            primary["ensemble"] = {
-                "agreement": "disagreed",
-                "models": [primary_model, second_model],
-                "labels": [primary["label"], second["label"]],
-                "resolved_by": "primary (adjudicator unavailable)",
-            }
-            return primary
+            verdict["confidence"] = _clamp_confidence(verdict.get("confidence"), first["confidence"])
+            return verdict
 
-        label = str(verdict.get("label") or "").strip().lower()
-        if not label:
-            label = primary["label"]
-
-        return {  # type: ignore[return-value]
-            "label": label,
-            "confidence": _clamp_confidence(verdict.get("confidence"), primary["confidence"]),
-            "ensemble": {
-                "agreement": "disagreed",
-                "models": [primary_model, second_model],
-                "labels": [primary["label"], second["label"]],
-                "resolved_by": self._settings.mistral.reasoning_model,
-                "reasoning": str(verdict.get("reason") or "")[:300] or None,
-            },
-        }
+        return run_ensemble(
+            classify_once=lambda model: self._classify_once(image_path, model),
+            adjudicate=adjudicate,
+            primary_model=primary_model,
+            second_model=self._settings.mistral.fast_model,
+            adjudicator_model=self._settings.mistral.reasoning_model,
+            timeout_seconds=self._settings.mistral.timeout_seconds + 5,
+        )
 
     def detect_objects(self, image_path: str, *, wildlife: bool = False) -> DetectionResult:
         focus = (
