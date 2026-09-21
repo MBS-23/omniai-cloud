@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="OmniAI Cloud analyses images, documents and text, selects the right models automatically, and explains every routing decision.">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#07080c">
+  <title>{{ app_title }} — {{ app_subtitle }}</title>
+
+  <script>
+    // Runs before first paint, so someone who chose light never sees a dark
+    // flash. Dark is the default; only an explicit stored choice overrides it.
+    (function () {
+      try {
+        if (localStorage.getItem('omniai.theme') === 'light') {
+          document.documentElement.dataset.theme = 'light';
+        }
+      } catch (e) { /* private mode: keep the dark default from the markup */ }
+    })();
+  </script>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/omniai.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23ff6a3d'/><circle cx='16' cy='16' r='5' fill='%23fff'/></svg>">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+<div class="scrollbar-progress" id="scrollProgress" aria-hidden="true"></div>
+<!-- Pointer-following glow and dot. Decorative; hidden on touch and under reduced motion. -->
+<div class="cursorglow" id="cursorGlow" aria-hidden="true"></div>
+<div class="cursordot" id="cursorDot" aria-hidden="true"></div>
+
+<!-- Icon sprite. Inline, so the CSP needs no external source. -->
+<svg hidden aria-hidden="true">
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12.5 5 5L20 6.5"/></symbol>
+  <symbol id="i-dash" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 8v5m0 3h.01M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4m0-4h.01"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3M3 12h18"/></symbol>
+  <symbol id="i-text" viewBox="0 0 24 24"><path d="M4 7V5h16v2M9 5v14M15 5v14M7 19h10"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18Z"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></symbol>
+</svg>
+
+<!-- Fixed backdrop: technical grid, accent bloom, and the 3D field. -->
+<div class="backdrop" aria-hidden="true">
+  <div class="backdrop__grid"></div>
+  <div class="backdrop__bloom"></div>
+  <canvas class="backdrop__field" id="field"></canvas>
+</div>
+
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <a class="wordmark" href="/">
+      <span class="wordmark__glyph" aria-hidden="true"><span></span></span>
+      <span>OmniAI</span>
+      <span class="wordmark__sub">Cloud</span>
+    </a>
+    <div class="masthead__meta">
+      <span class="chip {{ '' if backend_ready else 'chip--degraded' }}"
+            title="Active runtime profile and model backend">
+        <span class="chip__dot"></span>{{ profile }} · {{ backend_name }}
+      </span>
+      <span class="chip" title="Species the wildlife router recognises">{{ species_count }} species</span>
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Switch theme">
+        <svg class="icon-sun" width="17" height="17" aria-hidden="true"><use href="#i-sun"></use></svg>
+        <svg class="icon-moon" width="17" height="17" aria-hidden="true"><use href="#i-moon"></use></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="shell">
+
+  {% if not backend_ready %}
+  <div class="section section--flush">
+    <div class="banner banner--warn" role="status">
+      <svg class="banner__icon" width="18" height="18"><use href="#i-alert"></use></svg>
+      <div>
+        <div class="banner__title">No model backend is configured</div>
+        The <code>lite</code> profile needs a Mistral API key. Add
+        <code>OMNIAI_MISTRAL_API_KEY</code> to your <code>.env</code> file and restart,
+        or set <code>OMNIAI_PROFILE=full</code> to run the models locally.
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ============================================ HERO ================ -->
+  <section class="section section--hero">
+    <div class="grid">
+      <div class="col-main">
+        <h1 class="hero-title reveal">One system.<br><em>Every input.</em></h1>
+        <p class="lede reveal mt-5" data-delay="1">
+          Upload an image, a PDF or a Word document, or paste text. OmniAI detects
+          what it received, routes it to the models that suit it, and explains every
+          decision it made along the way.
+        </p>
+        <div class="actions mt-6 reveal" data-delay="2">
+          <a class="btn btn--primary" href="#s-input">
+            <svg width="16" height="16" aria-hidden="true"><use href="#i-spark"></use></svg>
+            Start an analysis
+          </a>
+          <a class="btn" href="#s-results">
+            <svg width="16" height="16" aria-hidden="true"><use href="#i-eye"></use></svg>
+            See results
+          </a>
+        </div>
+      </div>
+      <div class="col-side">
+        <div class="stack stack--tight pt-3 reveal" data-delay="3">
+          <div class="label">How it works</div>
+          <ol class="steps">
+            <li>The input is inspected and classified.</li>
+            <li>An agent selects only the models it needs.</li>
+            <li>Results are aggregated and explained.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <div class="figures mt-6">
+      <div class="figure reveal" data-tilt data-delay="1">
+        <div class="figure__value" data-count="{{ species_count }}">0</div>
+        <div class="figure__label">Species recognised</div>
+      </div>
+      <div class="figure figure--accent reveal" data-tilt data-delay="2">
+        <div class="figure__value" data-count="7">0</div>
+        <div class="figure__label">Model capabilities</div>
+      </div>
+      <div class="figure reveal" data-tilt data-delay="3">
+        <div class="figure__value" data-count="40">0</div>
+        <div class="figure__label">Languages supported</div>
+      </div>
+      <div class="figure reveal" data-tilt data-delay="4">
+        <div class="figure__value">{{ max_upload_mb }}<span class="muted"> MB</span></div>
+        <div class="figure__label">Maximum upload</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================ 01 INPUT ============ -->
+  <section class="section" aria-labelledby="s-input">
+    <div class="section__head reveal" id="s-input">
+      <span class="section__number">01</span>
+      <h2 class="section__title">Input</h2>
+      <span class="section__note" id="inputNote">Choose a source to analyse</span>
+    </div>
+
+    <form id="analysisForm" novalidate>
+      <div class="stack">
+        <div class="tabs reveal" role="tablist" aria-label="Input type">
+          <span class="tabs__indicator" aria-hidden="true"></span>
+          <button type="button" class="tabs__btn" role="tab" id="tabFile"
+                  aria-selected="true" aria-controls="panelFile">
+            <svg width="15" height="15" aria-hidden="true"><use href="#i-doc"></use></svg>
+            Image or document
+          </button>
+          <button type="button" class="tabs__btn" role="tab" id="tabText"
+                  aria-selected="false" aria-controls="panelText" tabindex="-1">
+            <svg width="15" height="15" aria-hidden="true"><use href="#i-text"></use></svg>
+            Text
+          </button>
+        </div>
+
+        <!-- File input -->
+        <div id="panelFile" role="tabpanel" aria-labelledby="tabFile">
+          <div class="grid">
+            <div class="col-main">
+              <div class="dropzone reveal" id="dropzone" data-pointer-light>
+                <input type="file" id="fileInput"
+                       accept=".jpg,.jpeg,.png,.webp,.pdf,.docx" aria-describedby="fileHint">
+                <span class="dropzone__icon">
+                  <svg width="24" height="24" aria-hidden="true"><use href="#i-upload"></use></svg>
+                </span>
+                <div>
+                  <div class="dropzone__title" id="dropzoneTitle">Drop a file here, or click to browse</div>
+                  <div class="dropzone__meta" id="fileMeta">No file selected</div>
+                </div>
+              </div>
+              <div id="filePreview" class="preview" hidden></div>
+            </div>
+            <div class="col-side">
+              <div class="stack stack--tight reveal" data-delay="1">
+                <div class="label">Accepted</div>
+                <p id="fileHint" class="note">
+                  JPG, PNG, WebP, PDF and DOCX, up to {{ max_upload_mb }} MB.
+                  Scanned PDFs are detected automatically and sent through OCR.
+                </p>
+                <div class="tags mt-3">
+                  <span class="tag">JPG</span><span class="tag">PNG</span>
+                  <span class="tag">WebP</span><span class="tag">PDF</span>
+                  <span class="tag">DOCX</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Text input -->
+        <div id="panelText" role="tabpanel" aria-labelledby="tabText" hidden>
+          <div class="grid">
+            <div class="col-main">
+              <div class="field">
+                <label class="field__label" for="textInput">Text to analyse</label>
+                <textarea id="textInput" class="textarea"
+                          placeholder="Paste or type text in any supported language…"
+                          aria-describedby="textMetrics"></textarea>
+                <div class="actions actions--split">
+                  <span class="field__hint mono" id="textMetrics">0 characters · 0 words</span>
+                  <span class="actions">
+                    <button type="button" class="btn btn--sm btn--quiet" id="sampleBtn">Use sample</button>
+                    <button type="button" class="btn btn--sm btn--quiet" id="clearTextBtn">Clear</button>
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="col-side">
+              <div class="stack">
+                <label class="switch">
+                  <input type="checkbox" id="autoDetect" checked>
+                  <span class="switch__track"></span>
+                  <span class="switch__text">Detect source language</span>
+                </label>
+                <div class="field">
+                  <label class="field__label" for="sourceLanguage">Source language</label>
+                  <select id="sourceLanguage" class="select" disabled></select>
+                </div>
+                <div class="field">
+                  <label class="field__label" for="targetLanguage">Translate into</label>
+                  <select id="targetLanguage" class="select"></select>
+                  <span class="field__hint">Translation is skipped when this matches the source.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions actions--end">
+          <button type="button" class="btn" id="resetBtn">Reset</button>
+          <button type="submit" class="btn btn--primary" id="analyzeBtn">
+            <span class="btn__spinner" hidden aria-hidden="true"></span>
+            <svg width="16" height="16" aria-hidden="true" id="analyzeIcon"><use href="#i-scan"></use></svg>
+            <span id="analyzeLabel">Analyse</span>
+          </button>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  <!-- ============================================ 02 PIPELINE ========= -->
+  <section class="section" id="pipelineSection" aria-labelledby="s-pipeline" hidden>
+    <div class="section__head" id="s-pipeline">
+      <span class="section__number">02</span>
+      <h2 class="section__title">Pipeline</h2>
+      <span class="section__note">Live, streamed from the server</span>
+    </div>
+
+    <!-- Live flow diagram. Each node lights as the corresponding pipeline
+         stage reports in, so this is a view of real state, not an animation
+         playing alongside one. -->
+    <div class="flow" id="flow" aria-hidden="true">
+      <svg class="flow__svg" viewBox="0 0 1000 120" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="flowGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="var(--accent)"/>
+            <stop offset="100%" stop-color="var(--accent-2)"/>
+          </linearGradient>
+        </defs>
+
+        <!-- Track -->
+        <line class="flow__track" x1="70" y1="60" x2="930" y2="60"/>
+        <!-- Progress line, scaled by the pipeline percentage -->
+        <line class="flow__live" id="flowLive" x1="70" y1="60" x2="930" y2="60"/>
+
+        <g class="flow__node" data-node="inspect">
+          <circle cx="70" cy="60" r="16"/>
+          <text x="70" y="98">Inspect</text>
+        </g>
+        <g class="flow__node" data-node="route">
+          <circle cx="285" cy="60" r="16"/>
+          <text x="285" y="98">Route</text>
+        </g>
+        <g class="flow__node" data-node="models">
+          <circle cx="500" cy="60" r="16"/>
+          <text x="500" y="98">Models</text>
+        </g>
+        <g class="flow__node" data-node="aggregate">
+          <circle cx="715" cy="60" r="16"/>
+          <text x="715" y="98">Aggregate</text>
+        </g>
+        <g class="flow__node" data-node="explain">
+          <circle cx="930" cy="60" r="16"/>
+          <text x="930" y="98">Explain</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="pipeline">
+      <!-- Shown while the stream is open; swapped for the percentage when done. -->
+      <div class="analysing" id="analysing" hidden>
+        <div class="aicore" aria-hidden="true">
+          <span class="aicore__ring"></span>
+          <span class="aicore__ring"></span>
+          <span class="aicore__ring"></span>
+          <span class="aicore__pulse"></span>
+        </div>
+        <div class="analysing__text">
+          <div class="analysing__title">Analysing<span class="analysing__dots"></span></div>
+          <div class="analysing__stage" id="analysingStage">Starting the pipeline</div>
+        </div>
+      </div>
+
+      <div class="pipeline__head">
+        <div>
+          <div class="label">Progress</div>
+          <div class="pipeline__pct" id="progressPct" aria-live="polite">0%</div>
+        </div>
+        <div class="mono muted" id="progressStage">Waiting…</div>
+      </div>
+      <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+           aria-valuenow="0" aria-label="Analysis progress" id="meter">
+        <div class="meter__fill" id="meterFill"></div>
+      </div>
+      <ul class="stages" id="stages"></ul>
+    </div>
+  </section>
+
+  <!-- ============================================ 03 RESULTS ========== -->
+  <section class="section" aria-labelledby="s-results">
+    <div class="section__head reveal" id="s-results">
+      <span class="section__number">03</span>
+      <h2 class="section__title">Results</h2>
+      <span class="section__note actions" id="resultActions" hidden>
+        <button type="button" class="btn btn--sm" id="expandAllBtn">Expand all</button>
+        <button type="button" class="btn btn--sm" id="downloadBtn">Download JSON</button>
+      </span>
+    </div>
+
+    <div id="statusArea" class="stack mb-5"></div>
+
+    <div id="emptyState" class="empty reveal">
+      <span class="empty__icon"><svg width="24" height="24" aria-hidden="true"><use href="#i-layers"></use></svg></span>
+      <div>
+        <div class="title mb-3">Nothing analysed yet</div>
+        <p class="note note--muted">
+          Results appear here once you run an analysis. You will see which models
+          the agent chose, what each one returned, and why.
+        </p>
+      </div>
+    </div>
+
+    <!-- Holds the shape of the results while they are still being produced. -->
+    <div id="resultsSkeleton" class="skeletons" hidden aria-hidden="true">
+      <div class="figures">
+        <div class="skeleton skeleton--card"></div>
+        <div class="skeleton skeleton--card"></div>
+        <div class="skeleton skeleton--card"></div>
+        <div class="skeleton skeleton--card"></div>
+      </div>
+      <div class="skeleton skeleton--title"></div>
+      <div class="skeleton skeleton--line"></div>
+      <div class="skeleton skeleton--short"></div>
+    </div>
+
+    <div id="resultsBody" hidden>
+      <div class="figures" id="figures"></div>
+      <div class="mt-6">
+        <div class="label mb-3">Models executed</div>
+        <div class="tags" id="modelTags"></div>
+      </div>
+      <div class="panels mt-6" id="panels"></div>
+    </div>
+  </section>
+
+  <!-- ============================================ 04 EXPLAINABILITY === -->
+  <section class="section" id="explainSection" aria-labelledby="s-explain" hidden>
+    <div class="section__head" id="s-explain">
+      <span class="section__number">04</span>
+      <h2 class="section__title">Explainability</h2>
+      <span class="section__note">
+        <button type="button" class="btn btn--sm btn--quiet" id="copyExplainBtn">Copy</button>
+      </span>
+    </div>
+    <div class="grid">
+      <div class="col-main"><div class="explain" id="explainBody"></div></div>
+      <div class="col-side">
+        <div class="stack stack--tight">
+          <div class="label">Why this matters</div>
+          <p class="note note--muted">
+            Every routing decision is recorded and stated in plain language, so the
+            output can be checked rather than taken on trust.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="section pb-8">
+    <div class="grid">
+      <div class="col-half">
+        <p class="note note--muted">
+          OmniAI Cloud · An intelligent unified multi-modal AI system with automatic
+          model selection and explainability.
+        </p>
+      </div>
+      <div class="col-half">
+        <p class="note note--muted mono text-right">profile: {{ profile }} · backend: {{ backend_name }}</p>
+      </div>
+    </div>
+  </footer>
+</main>
+
+<div class="toasts" id="toasts" role="region" aria-label="Notifications"></div>
+
+<script id="omniai-config" type="application/json">
+  {{ {
+    'languageNames': language_names,
+    'translationCodes': translation_language_codes,
+    'maxUploadMb': max_upload_mb,
+    'maxTextChars': max_text_chars,
+    'backendReady': backend_ready
+  } | tojson }}
+</script>
+<script src="{{ url_for('static', filename='js/ui.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/field.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/omniai.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/cursor.js') }}" defer></script>
+</body>
+</html>

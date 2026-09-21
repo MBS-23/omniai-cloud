@@ -1,0 +1,26 @@
+services:
+  omniai:
+    build: .
+    image: omniai-cloud:lite
+    ports:
+      - "8000:8000"
+    environment:
+      OMNIAI_PROFILE: lite
+      OMNIAI_MISTRAL_API_KEY: ${OMNIAI_MISTRAL_API_KEY:?set OMNIAI_MISTRAL_API_KEY in .env}
+      OMNIAI_RATE_LIMIT_PER_MINUTE: "20"
+      OMNIAI_MAX_UPLOAD_BYTES: "26214400"
+    # Uploads are written to a tmpfs: they are transient, and keeping them off
+    # the container filesystem means a crashed request leaves nothing behind.
+    tmpfs:
+      - /app/temp_uploads:size=128m
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - omniai-logs:/app/logs
+    restart: unless-stopped
+
+volumes:
+  omniai-logs:

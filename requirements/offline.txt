@@ -1,0 +1,24 @@
+# Offline profile: every model runs locally, no API key required.
+#
+#   pip install -r requirements/offline.txt
+#   python -m backend.models.download_models
+#
+# Works on Python 3.11 through 3.14. Downloads roughly 6 GB of weights once,
+# then makes no network call at request time.
+-r base.txt
+
+# --- Deep learning -------------------------------------------------
+# CPU wheels. For CUDA instead, install torch first from the PyTorch index:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+torch>=2.9
+torchvision>=0.24
+transformers>=4.57
+accelerate>=1.0
+safetensors>=0.5
+sentencepiece>=0.2
+timm>=1.0
+
+# --- OCR -----------------------------------------------------------
+# EasyOCR replaces PaddleOCR, which publishes no wheels for current Python.
+# Bundles its own CRAFT text detector and CRNN recogniser.
+easyocr>=1.7

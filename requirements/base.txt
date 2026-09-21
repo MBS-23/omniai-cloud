@@ -1,0 +1,15 @@
+# Shared by both profiles. Nothing here pulls in a deep-learning framework.
+Flask==3.1.2
+python-dotenv==1.2.1
+requests==2.32.3
+gunicorn==23.0.0; sys_platform != "win32"
+waitress==3.0.2; sys_platform == "win32"
+
+# Input handling
+Pillow==11.3.0
+pypdf==6.1.1
+pdf2image==1.17.0
+python-docx==1.2.0
+
+# Language detection (pure Python, used by both profiles)
+langdetect==1.0.9

@@ -1,0 +1,28 @@
+.git/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage*
+
+# Never bake secrets or weights into an image
+.env
+.env.*
+!.env.example
+backend/models/downloaded_models/
+*.pt
+*.pth
+*.safetensors
+
+temp_uploads/
+logs/
+tests/
+docs/
+Reference papers for OMNIAI/
+*.md
+!README.md
+.vscode/
+.claude/

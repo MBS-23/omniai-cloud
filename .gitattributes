@@ -1,0 +1,10 @@
+# Normalise to LF in the repository. The app deploys to Linux, where a CRLF in
+# a Dockerfile RUN line or a shell script fails in ways that are hard to spot.
+* text=auto eol=lf
+
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.pdf  binary
+*.docx binary

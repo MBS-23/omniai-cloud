@@ -1,0 +1,33 @@
+# Full profile: every model executes locally, as described in the paper.
+#
+#   python3.11 -m pip install -r requirements/full.txt
+#
+# REQUIRES PYTHON 3.11. PaddlePaddle and the pinned PyTorch build publish no
+# wheels for 3.12+. Downloads roughly 6 GB of weights on first run.
+-r base.txt
+
+# --- Deep learning -------------------------------------------------
+# CPU wheels by default. For CUDA 11.8 instead, install torch first:
+#   pip install torch==2.7.1+cu118 torchvision==0.22.1+cu118 \
+#       --index-url https://download.pytorch.org/whl/cu118
+torch==2.7.1
+torchvision==0.22.1
+transformers==4.44.2
+accelerate==0.34.2
+safetensors==0.4.5
+sentencepiece==0.2.0
+
+# --- Vision --------------------------------------------------------
+ultralytics==8.3.40
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+
+# --- OCR -----------------------------------------------------------
+# PaddleOCR 2.x. The API changed in 3.x (use_angle_cls and show_log were
+# removed), so this pin is load-bearing for backend/modules/ocr_paddle.py.
+paddleocr==2.7.3
+paddlepaddle==2.6.2
+
+# --- NLP -----------------------------------------------------------
+spacy==3.7.5
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl

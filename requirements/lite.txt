@@ -1,0 +1,7 @@
+# Lite profile: models are served by the Mistral API.
+#
+#   python -m pip install -r requirements/lite.txt
+#
+# Runs on Python 3.11 through 3.14. No PyTorch, no CUDA, ~40 MB installed.
+# This is the profile the Docker image and the public deployment use.
+-r base.txt
