@@ -32,23 +32,68 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 Profile = Literal["offline", "full", "lite"]
 
-# Keys are read as OMNIAI_<NAME>; the bare <NAME> is accepted as a fallback so
-# that .env files written before the namespacing was introduced keep working.
-_LEGACY_ALIASES = {
-    "OMNIAI_MISTRAL_API_KEY": "MISTRAL_API_KEY",
-    "OMNIAI_PROFILE": "PROFILE",
-    "OMNIAI_GEMINI_API_KEY": "GEMINI_API_KEY",
+# Settings are read as OMNIAI_<NAME>, with fallbacks so a key set under a
+# common alternative name still works. GOOGLE_API_KEY is included because it is
+# the name Google's own SDKs read, which makes it a likely thing to have typed
+# into a hosting dashboard.
+_ALIASES: dict[str, tuple[str, ...]] = {
+    "OMNIAI_MISTRAL_API_KEY": ("MISTRAL_API_KEY",),
+    "OMNIAI_PROFILE": ("PROFILE",),
+    "OMNIAI_GEMINI_API_KEY": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
 }
+
+# Kept for readers of the old name.
+_LEGACY_ALIASES = {name: aliases[0] for name, aliases in _ALIASES.items()}
+
+
+def _clean(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = value.strip().strip('"').strip("'").strip()
+    return value or None
 
 
 def _raw(name: str) -> str | None:
-    value = os.getenv(name)
-    if value is None and name in _LEGACY_ALIASES:
-        value = os.getenv(_LEGACY_ALIASES[name])
-    if value is None:
-        return None
-    value = value.strip().strip('"').strip("'")
-    return value or None
+    """First non-empty value among a setting's name and its aliases.
+
+    Empty values are skipped rather than returned, so a variable that exists
+    but was saved blank does not hide a correctly set alias behind it.
+    """
+    for candidate in (name, *_ALIASES.get(name, ())):
+        value = _clean(os.getenv(candidate))
+        if value:
+            return value
+    return None
+
+
+def key_diagnostics() -> dict[str, list[str]]:
+    """Why a hosted-provider key was not found, by variable NAME only.
+
+    Never returns a value. Reports names that were set but saved empty, and
+    names that look like an intended API key but are not one the app reads,
+    which between them account for most "I added the key and it still says
+    unconfigured" reports.
+    """
+    accepted = {
+        candidate
+        for name in ("OMNIAI_GEMINI_API_KEY", "OMNIAI_MISTRAL_API_KEY")
+        for candidate in (name, *_ALIASES[name])
+    }
+    set_but_empty = sorted(
+        name for name in accepted if name in os.environ and not _clean(os.environ[name])
+    )
+    lookalikes = sorted(
+        name
+        for name in os.environ
+        if name not in accepted
+        and "KEY" in name.upper()
+        and any(hint in name.upper() for hint in ("GEMINI", "GOOGLE", "MISTRAL", "OMNI"))
+    )
+    return {
+        "accepted_names": sorted(accepted),
+        "set_but_empty": set_but_empty,
+        "similar_names_found": lookalikes,
+    }
 
 
 def _str(name: str, default: str) -> str:

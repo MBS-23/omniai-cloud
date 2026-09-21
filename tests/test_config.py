@@ -75,3 +75,46 @@ class TestServerlessPaths:
         clean_env.setenv("OMNIAI_GEMINI_API_KEY", "super-secret-gemini-key")
         described = str(config.reload_settings().describe())
         assert "super-secret-gemini-key" not in described
+
+
+class TestKeyLookup:
+    """Keys are found under common alternative names, and blanks never hide them."""
+
+    def test_google_api_key_is_accepted_for_gemini(self, clean_env):
+        """GOOGLE_API_KEY is what Google's own SDKs read."""
+        clean_env.setenv("GOOGLE_API_KEY", "g-key")
+        assert config._raw("OMNIAI_GEMINI_API_KEY") == "g-key"
+        assert config._resolve_hosted_provider() == "gemini"
+
+    def test_blank_primary_does_not_hide_a_set_alias(self, clean_env):
+        clean_env.setenv("OMNIAI_GEMINI_API_KEY", "   ")
+        clean_env.setenv("GEMINI_API_KEY", "real-key")
+        assert config._raw("OMNIAI_GEMINI_API_KEY") == "real-key"
+
+    def test_surrounding_quotes_and_spaces_are_stripped(self, clean_env):
+        """Dashboards and .env files both tempt people into quoting values."""
+        clean_env.setenv("OMNIAI_GEMINI_API_KEY", '  "quoted-key"  ')
+        assert config._raw("OMNIAI_GEMINI_API_KEY") == "quoted-key"
+
+
+class TestKeyDiagnostics:
+    def test_reports_a_blank_variable_by_name(self, clean_env):
+        clean_env.setenv("OMNIAI_GEMINI_API_KEY", "")
+        assert "OMNIAI_GEMINI_API_KEY" in config.key_diagnostics()["set_but_empty"]
+
+    def test_reports_a_misnamed_key_by_name(self, clean_env):
+        clean_env.setenv("GEMINI_KEY", "a-value")
+        assert "GEMINI_KEY" in config.key_diagnostics()["similar_names_found"]
+
+    def test_never_includes_a_value(self, clean_env):
+        clean_env.setenv("GEMINI_KEY", "do-not-leak-this-value")
+        clean_env.setenv("OMNIAI_GEMINI_API_KEY", "nor-this-one")
+        assert "do-not-leak" not in str(config.key_diagnostics())
+        assert "nor-this-one" not in str(config.key_diagnostics())
+
+
+def test_health_shows_diagnostics_only_while_unconfigured(client, backend):
+    """A configured deployment must not advertise its variable names."""
+    body = client.get("/api/health").get_json()
+    assert body["status"] == "ok"
+    assert "diagnostics" not in body

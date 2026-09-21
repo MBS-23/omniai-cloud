@@ -265,5 +265,10 @@ def health() -> Any:
         "capabilities": sorted(backend.capabilities()),
     }
     if not ready:
+        from backend.config import key_diagnostics
+
         payload["detail"] = settings.setup_hint()
+        # Variable names only, never values, and only while unconfigured: this
+        # is what tells someone their key was saved blank or under a typo.
+        payload["diagnostics"] = key_diagnostics()
     return jsonify(payload), (200 if ready else 503)
