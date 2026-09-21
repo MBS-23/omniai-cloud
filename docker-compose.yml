@@ -2,8 +2,10 @@
 #
 #   docker compose up --build        # then open http://localhost:7860
 #
-# With every model loaded the process needs about 8 GB of memory. On a smaller
-# machine keep OMNIAI_PRELOAD=none, as below, and models load on first use.
+# With every model loaded the process needs about 8 GB of memory. The defaults
+# below suit a laptop whose Docker has 4 GB: models load on first use, and the
+# least recently used ones are unloaded when the next would not fit. With 8 GB
+# or more for Docker, set OMNIAI_MODEL_BUDGET_MB=0 and OMNIAI_PRELOAD=all.
 services:
   omniai:
     build: .
@@ -12,6 +14,8 @@ services:
       - "7860:7860"
     environment:
       OMNIAI_PRELOAD: ${OMNIAI_PRELOAD:-none}
+      OMNIAI_MODEL_BUDGET_MB: ${OMNIAI_MODEL_BUDGET_MB:-2400}
+      OMNIAI_MAX_CONCURRENT: ${OMNIAI_MAX_CONCURRENT:-1}
       OMNIAI_RATE_LIMIT_PER_MINUTE: "30"
       OMNIAI_MAX_UPLOAD_BYTES: "26214400"
     # Uploads are written to a tmpfs: they are transient, and keeping them off

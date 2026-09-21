@@ -121,6 +121,11 @@ class _Run:
             self.warnings.append(message)
 
 
+def _count(number: int, noun: str) -> str:
+    """ "1 model", "4 models"."""
+    return f"{number} {noun}{'' if number == 1 else 's'}"
+
+
 def _word_count(text: str) -> int:
     return len([word for word in (text or "").split() if word])
 
@@ -196,7 +201,7 @@ def run_file_analysis(
     decision = auto_model_selector(metadata)
     planned = decision["models"]
     run.reasons = decision["reasoning"]
-    run.emit("route", "done", 18, detail=f"{len(planned)} model(s) selected")
+    run.emit("route", "done", 18, detail=_count(len(planned), "model") + " selected")
 
     # Progress is distributed evenly across the planned models, leaving the
     # last 12% for explanation assembly.
@@ -356,7 +361,7 @@ def _step_detect(run: _Run, path: str, floor: int) -> None:
 
     run.results["object_detection"] = result
     run.record("wildlife_detection" if wildlife else "object_detection")
-    run.emit(stage, "done", floor + 6, detail=f"{result.get('object_count', 0)} object(s)")
+    run.emit(stage, "done", floor + 6, detail=_count(result.get("object_count", 0), "object"))
 
 
 def _step_caption(run: _Run, path: str, floor: int) -> None:
@@ -470,7 +475,7 @@ def run_text_analysis(
     decision = auto_model_selector(metadata)
     planned = decision["models"]
     run.reasons = decision["reasoning"]
-    run.emit("route", "done", 25, detail=f"{len(planned)} model(s) selected")
+    run.emit("route", "done", 25, detail=_count(len(planned), "model") + " selected")
 
     source = (source_language or "auto").strip().lower()
     target = (target_language or "en").strip().lower()

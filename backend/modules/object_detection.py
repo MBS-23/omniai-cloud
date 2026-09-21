@@ -59,7 +59,7 @@ def run_yolo(model: Lazy, image_path: str, **options: Any) -> dict[str, Any]:
     return {"object_count": len(detections), "detections": detections}
 
 
-MODEL = Lazy("detect", "YOLOv8n", lambda: load_yolo("detect"))
+MODEL = Lazy("detect", "YOLOv8n", lambda: load_yolo("detect"), resident_mb=80)
 
 
 def detect_objects(image_path: str) -> dict[str, Any]:

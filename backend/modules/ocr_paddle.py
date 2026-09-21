@@ -88,7 +88,9 @@ _ENGINES: dict[str, Lazy] = {}
 
 def engine(lang: str) -> Lazy:
     if lang not in _ENGINES:
-        _ENGINES[lang] = Lazy(f"ocr-{lang}", f"PaddleOCR PP-OCRv5 ({lang})", lambda: _build_engine(lang))
+        _ENGINES[lang] = Lazy(
+            f"ocr-{lang}", f"PaddleOCR PP-OCRv5 ({lang})", lambda: _build_engine(lang), resident_mb=450
+        )
     return _ENGINES[lang]
 
 
@@ -187,6 +189,15 @@ def extract_text_paddle(image_path: str, langs: tuple[str, ...] | list[str] = ("
 
 
 def initialize_ocr_engines(langs: tuple[str, ...] | list[str] = ("en",)) -> None:
-    """Load the OCR engines up front, as the paper's pre-initialisation does."""
+    """Load the OCR engines up front, as the paper's pre-initialisation does.
+
+    Under a memory budget, stops at the first engine that would not fit
+    rather than unloading others to make room at startup.
+    """
+    from backend.modules.lazy import fits_in_budget
+
     for lang in langs:
-        engine(lang).get()
+        handle = engine(lang)
+        if not handle.loaded and not fits_in_budget(handle):
+            break
+        handle.get()

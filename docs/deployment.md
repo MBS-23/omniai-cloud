@@ -116,9 +116,12 @@ curl -fsS http://localhost:7860/api/health
 
 The compose file drops all capabilities, sets `no-new-privileges`, and mounts
 `/app/temp_uploads` as a tmpfs so uploads never touch the container
-filesystem. It sets `OMNIAI_PRELOAD=none` so the image also runs on a laptop
-with less than 8 GB: models then load on first use. Set it to `all` on a host
-with the memory.
+filesystem. Its defaults suit a laptop that gives Docker about 4 GB: models
+load on first use (`OMNIAI_PRELOAD=none`), one analysis runs at a time
+(`OMNIAI_MAX_CONCURRENT=1`), and the models may use 2,400 MB
+(`OMNIAI_MODEL_BUDGET_MB`), unloading the least recently used one when the next
+would not fit. On a host with 8 GB or more for the container, set the budget to
+`0` and `OMNIAI_PRELOAD=all` to keep every model loaded.
 
 ## Platform notes
 

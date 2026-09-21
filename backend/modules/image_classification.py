@@ -32,7 +32,7 @@ def _build() -> tuple[Any, Any, list[str]]:
     return model, weights.transforms(), list(weights.meta["categories"])
 
 
-MODEL = Lazy("classify", "ResNet50", _build)
+MODEL = Lazy("classify", "ResNet50", _build, resident_mb=150, peak_mb=250)
 
 
 def classify_image(image_path: str) -> dict[str, Any]:

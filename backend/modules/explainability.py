@@ -138,7 +138,7 @@ def generate_explanation(
     detection = results.get("object_detection")
     if detection:
         count = detection.get("object_count", len(detection.get("detections", [])))
-        line = f"- Object detection{_with(detection)} located {count} object(s)."
+        line = f"- Object detection{_with(detection)} located {count} object{'' if count == 1 else 's'}."
         refinement = detection.get("refinement") or {}
         if refinement.get("applied"):
             changes = refinement.get("changes", [])
@@ -217,7 +217,7 @@ def generate_explanation(
         lines.append(
             f"{_list([_name(m) for m in skipped])} "
             f"{'was' if len(skipped) == 1 else 'were'} skipped: the pipeline "
-            "determined they would add nothing for this input."
+            f"determined {'it' if len(skipped) == 1 else 'they'} would add nothing for this input."
         )
 
     lines.append("")

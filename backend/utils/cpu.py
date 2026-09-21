@@ -38,8 +38,9 @@ def quantize_for_cpu(model: Any) -> Any:
     """int8 dynamic quantisation of a model's Linear layers, in place.
 
     Measured on two CPUs against the fp32 weights: BLIP-large captions in 4 to
-    7 s instead of 48 to 61 s, NLLB-200 and T5 three to four times faster, and
-    the text each produced was the same apart from punctuation. Done in place,
+    7 s instead of 48 to 61 s, NLLB-200 and T5 two to four times faster. NLLB
+    and T5 produced the same text apart from punctuation; BLIP's captions were
+    worded differently but described the same scene. Done in place,
     because the default copy briefly doubles memory, which is what fails on a
     small machine. Skipped when OMNIAI_QUANTIZE=none, or on a GPU.
     """

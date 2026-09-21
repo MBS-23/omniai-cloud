@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="380" viewBox="0 0 720 380" role="img" aria-labelledby="t d">
+<title id="t">Model weights on disk, MB</title>
+<desc id="d">The nine paper models, 6.1 GB in all, fetched from the Hugging Face Hub. NLLB-200 (600M): Weights 2,460.5 MB; BLIP (large): Weights 1,879.0 MB; T5 (base): Weights 891.6 MB; RoBERTa sentiment: Weights 501.0 MB; YOLOv8x: Weights 136.9 MB; PaddleOCR PP-OCRv5: Weights 118.1 MB; ResNet50: Weights 102.5 MB; spaCy en_core_web_sm: Weights 12.8 MB; YOLOv8n: Weights 6.5 MB</desc>
+<style>
+.title{font:600 15px system-ui,-apple-system,'Segoe UI',sans-serif;fill:#1f2328}
+.sub{font:400 12px system-ui,-apple-system,'Segoe UI',sans-serif;fill:#59636e}
+.label{font:400 13px system-ui,-apple-system,'Segoe UI',sans-serif;fill:#1f2328}
+.value{font:500 12px system-ui,-apple-system,'Segoe UI',sans-serif;fill:#59636e;font-variant-numeric:tabular-nums}
+.tick{font:400 11px system-ui,-apple-system,'Segoe UI',sans-serif;fill:#818b98;font-variant-numeric:tabular-nums}
+.grid{stroke:#d1d9e0;stroke-width:1}
+.base{stroke:#9198a1;stroke-width:1}
+.accent{fill:#d9541e}
+.context{fill:#8b8a84}
+@media (prefers-color-scheme: dark){
+.title,.label{fill:#e6edf3}
+.sub,.value{fill:#9198a1}
+.tick{fill:#768390}
+.grid{stroke:#30363d}
+.base{stroke:#656c76}
+.accent{fill:#e0602a}
+.context{fill:#7d7c76}
+}
+</style>
+<text class="title" x="0" y="20">Model weights on disk, MB</text>
+<text class="sub" x="0" y="40">The nine paper models, 6.1 GB in all, fetched from the Hugging Face Hub.</text>
+<line class="grid" x1="176.0" y1="52" x2="176.0" y2="350"/>
+<text class="tick" x="176.0" y="366" text-anchor="middle">0</text>
+<line class="grid" x1="272.0" y1="52" x2="272.0" y2="350"/>
+<text class="tick" x="272.0" y="366" text-anchor="middle">500</text>
+<line class="grid" x1="368.0" y1="52" x2="368.0" y2="350"/>
+<text class="tick" x="368.0" y="366" text-anchor="middle">1,000</text>
+<line class="grid" x1="464.0" y1="52" x2="464.0" y2="350"/>
+<text class="tick" x="464.0" y="366" text-anchor="middle">1,500</text>
+<line class="grid" x1="560.0" y1="52" x2="560.0" y2="350"/>
+<text class="tick" x="560.0" y="366" text-anchor="middle">2,000</text>
+<line class="grid" x1="656.0" y1="52" x2="656.0" y2="350"/>
+<text class="tick" x="656.0" y="366" text-anchor="middle">2,500</text>
+<line class="base" x1="176" y1="52" x2="176" y2="350"/>
+<text class="label" x="164" y="70.5" text-anchor="end">NLLB-200 (600M)</text>
+<path class="accent" d="M176.0,58.0 H644.4 A4.0,4.0 0 0 1 648.4,62.0 V70.0 A4.0,4.0 0 0 1 644.4,74.0 H176.0 Z"/>
+<text class="value" x="654.4" y="70.0">2,460.5 MB</text>
+<text class="label" x="164" y="104.5" text-anchor="end">BLIP (large)</text>
+<path class="accent" d="M176.0,92.0 H532.8 A4.0,4.0 0 0 1 536.8,96.0 V104.0 A4.0,4.0 0 0 1 532.8,108.0 H176.0 Z"/>
+<text class="value" x="542.8" y="104.0">1,879.0 MB</text>
+<text class="label" x="164" y="138.5" text-anchor="end">T5 (base)</text>
+<path class="accent" d="M176.0,126.0 H343.2 A4.0,4.0 0 0 1 347.2,130.0 V138.0 A4.0,4.0 0 0 1 343.2,142.0 H176.0 Z"/>
+<text class="value" x="353.2" y="138.0">891.6 MB</text>
+<text class="label" x="164" y="172.5" text-anchor="end">RoBERTa sentiment</text>
+<path class="accent" d="M176.0,160.0 H268.2 A4.0,4.0 0 0 1 272.2,164.0 V172.0 A4.0,4.0 0 0 1 268.2,176.0 H176.0 Z"/>
+<text class="value" x="278.2" y="172.0">501.0 MB</text>
+<text class="label" x="164" y="206.5" text-anchor="end">YOLOv8x</text>
+<path class="accent" d="M176.0,194.0 H198.3 A4.0,4.0 0 0 1 202.3,198.0 V206.0 A4.0,4.0 0 0 1 198.3,210.0 H176.0 Z"/>
+<text class="value" x="208.3" y="206.0">136.9 MB</text>
+<text class="label" x="164" y="240.5" text-anchor="end">PaddleOCR PP-OCRv5</text>
+<path class="accent" d="M176.0,228.0 H194.7 A4.0,4.0 0 0 1 198.7,232.0 V240.0 A4.0,4.0 0 0 1 194.7,244.0 H176.0 Z"/>
+<text class="value" x="204.7" y="240.0">118.1 MB</text>
+<text class="label" x="164" y="274.5" text-anchor="end">ResNet50</text>
+<path class="accent" d="M176.0,262.0 H191.7 A4.0,4.0 0 0 1 195.7,266.0 V274.0 A4.0,4.0 0 0 1 191.7,278.0 H176.0 Z"/>
+<text class="value" x="201.7" y="274.0">102.5 MB</text>
+<text class="label" x="164" y="308.5" text-anchor="end">spaCy en_core_web_sm</text>
+<path class="accent" d="M176.0,296.0 H177.2 A1.2,1.2 0 0 1 178.5,297.2 V310.8 A1.2,1.2 0 0 1 177.2,312.0 H176.0 Z"/>
+<text class="value" x="184.5" y="308.0">12.8 MB</text>
+<text class="label" x="164" y="342.5" text-anchor="end">YOLOv8n</text>
+<path class="accent" d="M176.0,330.0 H176.6 A0.6,0.6 0 0 1 177.2,330.6 V345.4 A0.6,0.6 0 0 1 176.6,346.0 H176.0 Z"/>
+<text class="value" x="183.2" y="342.0">6.5 MB</text>
+</svg>

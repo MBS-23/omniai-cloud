@@ -117,23 +117,16 @@
       </div>
     </div>
 
-    <div class="figures mt-6">
-      <div class="figure reveal" data-tilt data-delay="1">
-        <div class="figure__value" data-count="{{ species_count }}">0</div>
-        <div class="figure__label">Animal names the router knows</div>
-      </div>
-      <div class="figure figure--accent reveal" data-tilt data-delay="2">
-        <div class="figure__value" data-count="{{ capability_count }}">0</div>
-        <div class="figure__label">Analysis capabilities</div>
-      </div>
-      <div class="figure reveal" data-tilt data-delay="3">
-        <div class="figure__value" data-count="{{ language_count }}">0</div>
-        <div class="figure__label">Translation languages</div>
-      </div>
-      <div class="figure reveal" data-tilt data-delay="4">
-        <div class="figure__value">{{ max_upload_mb }}<span class="muted"> MB</span></div>
-        <div class="figure__label">Maximum upload</div>
-      </div>
+    <div class="lineup mt-6 reveal" data-delay="3">
+      <p class="lineup__intro">{{ lineup_intro }}</p>
+      <ul class="lineup__list" aria-label="Models on this page">
+        {% for name, role in lineup %}
+        <li class="lineup__item">
+          <span class="lineup__name">{{ name }}</span>
+          <span class="lineup__role">{{ role }}</span>
+        </li>
+        {% endfor %}
+      </ul>
     </div>
   </section>
 

@@ -229,3 +229,47 @@ def test_explanations_name_the_model_without_its_repository(model, expected):
     from backend.modules.explainability import _with
 
     assert _with({"model": model}) == expected
+
+
+class TestMemoryBudget:
+    """Under a budget, the least recently used models make way; without one, nothing is unloaded."""
+
+    @staticmethod
+    def _handles(monkeypatch, budget):
+        from backend.modules import lazy
+
+        monkeypatch.setattr(lazy, "_REGISTRY", {})
+        monkeypatch.setenv("OMNIAI_MODEL_BUDGET_MB", str(budget))
+        small = lazy.Lazy("small", "small", lambda: object(), resident_mb=300)
+        medium = lazy.Lazy("medium", "medium", lambda: object(), resident_mb=500)
+        large = lazy.Lazy("large", "large", lambda: object(), resident_mb=700, peak_mb=900)
+        return small, medium, large
+
+    def test_the_least_recently_used_model_is_unloaded_first(self, monkeypatch):
+        small, medium, large = self._handles(monkeypatch, 1500)
+        small.get()
+        medium.get()
+        small.get()  # small is now the more recently used
+        large.get()  # needs 900 on top of 800: something must go
+        assert large.loaded and small.loaded
+        assert not medium.loaded
+
+    def test_without_a_budget_nothing_is_unloaded(self, monkeypatch):
+        small, medium, large = self._handles(monkeypatch, 0)
+        for handle in (small, medium, large):
+            handle.get()
+        assert small.loaded and medium.loaded and large.loaded
+
+    def test_an_unloaded_model_reloads_on_next_use(self, monkeypatch):
+        small, medium, large = self._handles(monkeypatch, 1000)
+        small.get()
+        large.get()
+        assert not small.loaded
+        assert small.get() is not None and small.loaded
+
+    def test_a_caller_keeps_its_model_after_it_is_unloaded(self, monkeypatch):
+        small, _, large = self._handles(monkeypatch, 1000)
+        held = small.get()
+        large.get()
+        assert not small.loaded
+        assert held is not None

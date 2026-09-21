@@ -51,7 +51,7 @@
     countUp(el, value, o = {}) {
       el.textContent = Number(value).toFixed(o.decimals || 0) + (o.suffix || '');
     },
-    animateBar(fill, percent) { fill.style.width = `${percent}%`; },
+    animateBar(fill, percent) { fill.style.clipPath = `inset(0 ${100 - percent}% 0 0 round 999px)`; },
   };
 
   const DRAFT_KEY = 'omniai.draft.v2';
@@ -222,7 +222,7 @@
     stageRows.clear();
     resetFlow();
     clearNode(el.stages);
-    el.meterFill.style.width = '0%';
+    el.meterFill.style.transform = 'scaleX(0)';
     el.meter.setAttribute('aria-valuenow', '0');
     el.progressPct.textContent = '0%';
     el.progressStage.textContent = 'Starting…';
@@ -294,7 +294,7 @@
   function applyProgress(event) {
     updateFlow(event);
     const percent = Math.max(0, Math.min(100, event.percent || 0));
-    el.meterFill.style.width = `${percent}%`;
+    el.meterFill.style.transform = `scaleX(${percent / 100})`;
     el.meter.setAttribute('aria-valuenow', String(percent));
     el.progressPct.textContent = `${percent}%`;
     el.progressStage.textContent = event.label || '';
@@ -434,10 +434,22 @@
     }
   }
 
+  // Pipeline module ids, as a person would name them.
+  const MODULE_NAMES = {
+    image_classification: 'Image classification',
+    object_detection: 'Object detection',
+    wildlife_detection: 'Wildlife detection',
+    ocr_paddle: 'Text extraction',
+    blip_vision_language: 'Captioning',
+    document_ai: 'Document analysis',
+    translation_ai: 'Translation',
+    text_analytics: 'Text analytics',
+  };
+
   function renderModels(data) {
     clearNode(el.modelTags);
     (data.selected_modules || []).forEach((name) => {
-      const tag = node('span', 'tag tag--active', titleCase(name));
+      const tag = node('span', 'tag tag--active', MODULE_NAMES[name] || titleCase(name));
       el.modelTags.appendChild(tag);
     });
     if (!(data.selected_modules || []).length) {
@@ -460,7 +472,7 @@
         const rows = node('div', 'rows');
         rows.appendChild(row('Label', titleCase(c.label)));
         rows.appendChild(row('Confidence', confidenceBar(c.confidence, true)));
-        if (ens.models) rows.appendChild(row('Models', ens.models.join(', ')));
+        if (ens.models) rows.appendChild(row(ens.models.length === 1 ? 'Model' : 'Models', ens.models.join(', ')));
         const runnersUp = (c.top_k || []).slice(1, 4);
         if (runnersUp.length) {
           rows.appendChild(row('Also considered', runnersUp

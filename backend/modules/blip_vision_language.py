@@ -25,7 +25,7 @@ def _build() -> tuple[Any, Any]:
     return processor, quantize_for_cpu(model.eval())
 
 
-MODEL = Lazy("caption", "BLIP (large)", _build)
+MODEL = Lazy("caption", "BLIP (large)", _build, resident_mb=1000, peak_mb=2000)
 
 
 def initialize_blip_model() -> None:

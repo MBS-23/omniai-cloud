@@ -56,7 +56,7 @@ def _build() -> tuple[Any, Any]:
     return tokenizer, quantize_for_cpu(model.eval())
 
 
-MODEL = Lazy("summarize", "T5 (base)", _build)
+MODEL = Lazy("summarize", "T5 (base)", _build, resident_mb=400, peak_mb=950)
 
 
 def _clean_text(text: str) -> str:

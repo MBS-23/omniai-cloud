@@ -164,25 +164,28 @@
     requestAnimationFrame(step);
   }
 
-  /** Fill a `.bar__fill` to a percentage once it scrolls into view. */
+  /** Reveal a `.bar__fill` to a percentage once it scrolls into view. */
   function animateBar(fill, percent) {
-    const width = `${Math.max(0, Math.min(100, Number(percent) || 0))}%`;
+    const shown = Math.max(0, Math.min(100, Number(percent) || 0));
+    const clip = `inset(0 ${100 - shown}% 0 0 round 999px)`;
 
     if (reduceMotion.matches || !('IntersectionObserver' in window)) {
-      fill.style.width = width;
+      fill.style.clipPath = clip;
       return;
     }
 
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (!entry.isIntersecting) return;
-        // Next frame, so the transition has a 0% start to animate from.
-        requestAnimationFrame(() => { fill.style.width = width; });
+        // Next frame, so the transition has a hidden start to animate from.
+        requestAnimationFrame(() => { fill.style.clipPath = clip; });
         observer.unobserve(entry.target);
       });
     }, { threshold: 0.2 });
 
-    observer.observe(fill);
+    // Watch the track, not the fill: a fill that starts fully clipped never
+    // counts as visible, so its own observer would never fire.
+    observer.observe(fill.parentElement || fill);
   }
 
   /* --------------------------------------------------------------- tilt */

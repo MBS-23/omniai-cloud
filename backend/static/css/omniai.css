@@ -110,7 +110,7 @@
 
   /* --- Motion ------------------------------------------------------ */
   --ease:        cubic-bezier(0.22, 0.61, 0.36, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
   --dur-1: 140ms;
   --dur-2: 280ms;
   --dur-3: 520ms;
@@ -194,6 +194,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 :focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-1); }
 ::selection { background: var(--accent); color: #fff; }
+:root { accent-color: var(--accent); caret-color: var(--accent); scrollbar-color: var(--border-2) var(--bg-deep); }
 
 ::-webkit-scrollbar { width: 11px; height: 11px; }
 ::-webkit-scrollbar-track { background: var(--bg-deep); }
@@ -264,12 +265,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
 /* The accent word carries a gradient. One place only, so it stays an event. */
 .hero-title em {
   font-style: normal;
-  background: linear-gradient(115deg, var(--accent) 0%, var(--accent-2) 60%, var(--accent) 100%);
-  background-size: 220% auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: sheen 7s linear infinite;
+  color: var(--accent);
 }
 
 .headline { font-family: var(--font-display); font-size: var(--text-xl); line-height: var(--leading-snug); font-weight: 400; }
@@ -388,7 +384,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
   background: var(--accent);
   box-shadow: 0 0 12px var(--accent), 0 0 30px var(--accent-line);
   transform: translate3d(var(--dx, 50vw), var(--dy, 50vh), 0) scale(var(--dscale, 1));
-  transition: opacity 300ms var(--ease), scale 200ms var(--ease-spring);
+  transition: opacity 300ms var(--ease), scale 200ms var(--ease-out);
   will-change: transform;
 }
 .cursordot.is-live { opacity: 1; }
@@ -428,7 +424,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
 .btn:hover::before { opacity: 1; }
 
 /* The icon leads the label on hover, which gives the press a direction. */
-.btn svg { transition: transform var(--dur-2) var(--ease-spring); }
+.btn svg { transition: transform var(--dur-2) var(--ease-out); }
 .btn:hover svg { transform: translateX(2px) scale(1.08); }
 .btn--primary:hover svg { transform: translateX(3px) scale(1.12) rotate(-6deg); }
 
@@ -580,8 +576,8 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
   border-radius: var(--radius-1);
   background: linear-gradient(140deg, var(--accent), var(--accent-2));
   box-shadow: var(--shadow-accent);
-  transition: transform var(--dur-2) var(--ease-spring), width var(--dur-2) var(--ease-spring);
-  will-change: transform, width;
+  transition: transform var(--dur-2) var(--ease-out);
+  will-change: transform;
 }
 
 .btn {
@@ -664,7 +660,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
 .switch__track::after {
   content: ""; position: absolute; top: 2px; left: 2px; width: 17px; height: 17px;
   border-radius: var(--radius-pill); background: var(--text-3);
-  transition: transform var(--dur-2) var(--ease-spring), background var(--dur-2) var(--ease);
+  transition: transform var(--dur-2) var(--ease-out), background var(--dur-2) var(--ease);
 }
 .switch input:checked + .switch__track {
   background: linear-gradient(140deg, var(--accent), var(--accent-2));
@@ -879,7 +875,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
   stroke: var(--border-2);
   stroke-width: 2;
   transition: fill var(--dur-2) var(--ease), stroke var(--dur-2) var(--ease),
-              r var(--dur-2) var(--ease-spring);
+              r var(--dur-2) var(--ease-out);
 }
 .flow__node text {
   fill: var(--text-3);
@@ -929,15 +925,15 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
 .pipeline__pct {
   font-family: var(--font-mono); font-size: var(--text-xl); line-height: 1;
   font-variant-numeric: tabular-nums;
-  background: linear-gradient(140deg, var(--accent), var(--accent-2));
-  -webkit-background-clip: text; background-clip: text; color: transparent;
+  color: var(--accent);
 }
 
 .meter { height: 3px; background: var(--surface-3); overflow: hidden; position: relative; }
 .meter__fill {
-  height: 100%; width: 0;
+  height: 100%; width: 100%;
+  transform: scaleX(0); transform-origin: left center;
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  transition: width var(--dur-3) var(--ease);
+  transition: transform var(--dur-3) var(--ease);
   position: relative;
 }
 /* A travelling highlight, so the bar reads as active even between updates. */
@@ -999,10 +995,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
   font-variant-numeric: tabular-nums; margin-bottom: var(--space-2);
   overflow-wrap: anywhere;
 }
-.figure--accent .figure__value {
-  background: linear-gradient(140deg, var(--accent), var(--accent-2));
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-}
+.figure--accent .figure__value { color: var(--accent); }
 .figure__label { font-size: var(--text-label); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-3); font-weight: 700; }
 
 .tags { display: flex; flex-wrap: wrap; gap: var(--space-2); }
@@ -1014,7 +1007,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
   font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-2);
   white-space: nowrap;
   transition: all var(--dur-1) var(--ease);
-  animation: pop-in var(--dur-2) var(--ease-spring) both;
+  animation: pop-in var(--dur-2) var(--ease-out) both;
 }
 .tag--active {
   border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent);
@@ -1071,9 +1064,10 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
 .bar { display: grid; grid-template-columns: 1fr auto; gap: var(--space-3); align-items: center; }
 .bar__track { height: 8px; background: var(--surface-3); border-radius: var(--radius-pill); overflow: hidden; }
 .bar__fill {
-  height: 100%; width: 0; border-radius: var(--radius-pill);
+  height: 100%; width: 100%; border-radius: var(--radius-pill);
+  clip-path: inset(0 100% 0 0 round var(--radius-pill));
   background: linear-gradient(90deg, var(--text-3), var(--text-2));
-  transition: width var(--dur-4) var(--ease);
+  transition: clip-path var(--dur-4) var(--ease);
 }
 .bar__fill--accent { background: linear-gradient(90deg, var(--accent), var(--accent-2)); box-shadow: 0 0 14px var(--accent-line); }
 .bar__num { font-family: var(--font-mono); font-size: var(--text-xs); font-variant-numeric: tabular-nums; min-width: 4.5ch; text-align: right; }
@@ -1095,7 +1089,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
   border: 1px solid var(--border); border-radius: var(--radius-1);
   background: var(--surface-2); font-size: var(--text-xs);
   transition: all var(--dur-1) var(--ease);
-  animation: pop-in var(--dur-2) var(--ease-spring) both;
+  animation: pop-in var(--dur-2) var(--ease-out) both;
 }
 .entity:hover { border-color: var(--accent-line); transform: translateY(-2px); }
 .entity__type { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--accent); text-transform: uppercase; font-weight: 600; }
@@ -1120,16 +1114,16 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
 .banner {
   display: grid; grid-template-columns: auto 1fr; gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--border); border-left-width: 3px; border-radius: var(--radius-1);
+  border: 1px solid var(--border); border-radius: var(--radius-1);
   background: var(--surface); font-size: var(--text-sm);
   animation: slide-in var(--dur-2) var(--ease) both;
 }
 .banner__icon { flex: none; margin-top: 2px; }
 .banner__title { font-weight: 700; margin-bottom: var(--space-1); }
-.banner--info   { border-left-color: var(--info);   background: var(--info-soft); }
-.banner--ok     { border-left-color: var(--ok);     background: var(--ok-soft); }
-.banner--warn   { border-left-color: var(--warn);   background: var(--warn-soft); }
-.banner--danger { border-left-color: var(--danger); background: var(--danger-soft); }
+.banner--info   { border-color: color-mix(in srgb, var(--info) 45%, var(--border)); background: var(--info-soft); }
+.banner--ok     { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); background: var(--ok-soft); }
+.banner--warn   { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); background: var(--warn-soft); }
+.banner--danger { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: var(--danger-soft); }
 .banner--info .banner__icon   { color: var(--info); }
 .banner--ok .banner__icon     { color: var(--ok); }
 .banner--warn .banner__icon   { color: var(--warn); }
@@ -1157,7 +1151,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
   padding: var(--space-4); border-radius: var(--radius-2);
   border: 1px solid var(--border-2); background: var(--surface-3); color: var(--text);
   font-size: var(--text-sm); box-shadow: var(--shadow-3);
-  animation: toast-in var(--dur-2) var(--ease-spring);
+  animation: toast-in var(--dur-2) var(--ease-out);
 }
 .toast--danger { border-color: var(--danger); background: var(--danger-soft); }
 .toast--ok { border-color: var(--ok); background: var(--ok-soft); }
@@ -1167,7 +1161,6 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
 /* ------------------------------------------------------------ 15 Motion */
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes spin-slow { to { transform: rotate(360deg); } }
-@keyframes sheen { to { background-position: 220% center; } }
 @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
 @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
 @keyframes meter-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
@@ -1272,3 +1265,28 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
   .excerpt { max-height: none; overflow: visible; }
   .reveal { opacity: 1 !important; transform: none !important; }
 }
+
+/* ------------------------------------------------------------------
+   Hero: the models this page runs
+   A ruled list rather than a row of stat cards: each entry is a model
+   the visitor's input may meet, named with the job it does.
+   ------------------------------------------------------------------ */
+.lineup { border-top: 1px solid var(--border); padding-top: var(--space-5); }
+.lineup__intro { margin: 0 0 var(--space-4); color: var(--text-2); max-width: 60ch; }
+.lineup__list {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: var(--space-5);
+}
+.lineup__item {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--space-3) 0; border-bottom: 1px solid var(--border);
+  transition: border-color var(--dur-2) var(--ease);
+}
+.lineup__item:hover { border-bottom-color: var(--accent-line); }
+.lineup__name { font-family: var(--font-display); font-size: 1.3rem; color: var(--text); line-height: 1.2; }
+.lineup__item:hover .lineup__name { color: var(--accent); }
+.lineup__role { font-size: var(--text-sm); color: var(--text-3); }
+@media (max-width: 860px) { .lineup__list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 420px) { .lineup__list { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .lineup__item { transition: none; } }

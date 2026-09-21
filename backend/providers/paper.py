@@ -138,7 +138,13 @@ class PaperBackend(Backend):
 
                     initialize_ocr_engines(self._settings.ocr_langs)
                 else:
-                    self.model_handle(key).get()
+                    from backend.modules.lazy import fits_in_budget
+
+                    handle = self.model_handle(key)
+                    if not handle.loaded and not fits_in_budget(handle):
+                        logger.info("Pre-loading stopped at %s: the memory budget is full", key)
+                        break
+                    handle.get()
             except Exception as error:
                 # A model that fails here is retried on first use, where the
                 # failure is reported against the request that needed it.

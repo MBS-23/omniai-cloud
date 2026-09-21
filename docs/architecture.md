@@ -96,7 +96,9 @@ synchronisation, inside a route handler. Two concurrent first requests could
 both see `False` and both begin loading several gigabytes. Each model is now a
 `Lazy` handle (`modules/lazy.py`) that builds exactly once behind a lock. The
 paper profile pre-loads them on a background thread, so the server answers
-health checks from its first second while the weights load. Warmup happens once, at application
+health checks from its first second while the weights load. Where memory is
+short, `OMNIAI_MODEL_BUDGET_MB` caps what the models may hold, and the least
+recently used model is unloaded before the next one loads. Warmup happens once, at application
 construction, behind a lock.
 
 **Progress as data, not decoration.** `ProgressEvent` carries a stage name, a

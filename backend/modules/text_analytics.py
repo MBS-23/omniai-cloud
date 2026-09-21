@@ -46,8 +46,8 @@ def _build_sentiment() -> tuple[Any, Any]:
     return tokenizer, model.eval()
 
 
-NER = Lazy("ner", "spaCy en_core_web_sm", _build_ner)
-SENTIMENT = Lazy("sentiment", "RoBERTa sentiment", _build_sentiment)
+NER = Lazy("ner", "spaCy en_core_web_sm", _build_ner, resident_mb=80)
+SENTIMENT = Lazy("sentiment", "RoBERTa sentiment", _build_sentiment, resident_mb=550)
 
 
 def _normalize_sentiment_label(raw_label: str) -> str:

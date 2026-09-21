@@ -19,7 +19,7 @@ CONFIDENCE = 0.10
 IOU = 0.45
 MAX_DETECTIONS = 15
 
-MODEL = Lazy("wildlife", "YOLOv8x", lambda: load_yolo("wildlife"))
+MODEL = Lazy("wildlife", "YOLOv8x", lambda: load_yolo("wildlife"), resident_mb=350)
 
 
 def detect_wildlife(image_path: str) -> dict[str, Any]:

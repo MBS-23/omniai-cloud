@@ -43,7 +43,7 @@ def _build() -> tuple[Any, Any]:
     return tokenizer, quantize_for_cpu(model.eval())
 
 
-MODEL = Lazy("translate", "NLLB-200 (600M)", _build)
+MODEL = Lazy("translate", "NLLB-200 (600M)", _build, resident_mb=1700, peak_mb=2600)
 
 
 def _normalize(text: str) -> str:

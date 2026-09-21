@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="560" viewBox="0 0 900 560" role="img" aria-labelledby="t d">
+<title id="t">OmniAI Cloud architecture</title><desc id="d">Three layers. The interface layer serves the page and streams progress. The intelligence layer inspects the input, selects models, orchestrates and explains. The execution layer runs the paper&#x27;s nine models locally; their weights come from the Hugging Face Hub once, at build time.</desc>
+<style>
+text{font-family:system-ui,-apple-system,'Segoe UI',sans-serif}
+.h{font-size:13px;font-weight:600;fill:#1f2328}
+.t{font-size:12px;fill:#1f2328}
+.m{font-size:11px;fill:#59636e}
+.lane{font-size:12px;font-weight:600;fill:#59636e;letter-spacing:.04em}
+.box{fill:#f6f8fa;stroke:#d1d9e0;stroke-width:1.25}
+.key{fill:#fff4ef;stroke:#d9541e;stroke-width:1.25}
+.ask{fill:#ffffff;stroke:#d9541e;stroke-width:1.25;stroke-dasharray:4 3}
+.layer{fill:none;stroke:#d1d9e0;stroke-width:1}
+.wire{stroke:#818b98;stroke-width:1.4;fill:none}
+.tip{fill:#818b98}
+.yes{font-size:11px;font-weight:600;fill:#d9541e}
+@media (prefers-color-scheme: dark){
+.h,.t{fill:#e6edf3}
+.m,.lane{fill:#9198a1}
+.box{fill:#161b22;stroke:#3d444d}
+.key{fill:#2a1810;stroke:#e0602a}
+.ask{fill:#0d1117;stroke:#e0602a}
+.layer{stroke:#3d444d}
+.wire{stroke:#768390}
+.tip{fill:#768390}
+.yes{fill:#e0602a}
+}
+</style>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="tip" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="box" x="300" y="12" width="300" height="54" rx="8"/>
+<text class="h" x="450.0" y="35.5" text-anchor="middle">Browser</text>
+<text class="m" x="450.0" y="51.5" text-anchor="middle">Upload or text in, live progress and results out</text>
+<path class="wire" d="M450,66 L450,92" marker-end="url(#a)"/>
+<rect class="layer" x="10" y="92" width="880" height="96" rx="12"/>
+<text class="lane" x="26" y="114" text-anchor="start">INTERFACE LAYER</text>
+<rect class="box" x="40" y="124" width="250" height="52" rx="8"/>
+<text class="h" x="165.0" y="146.5" text-anchor="middle">Page and static assets</text>
+<text class="m" x="165.0" y="162.5" text-anchor="middle">routes/views.py, templates, static</text>
+<rect class="box" x="325" y="124" width="250" height="52" rx="8"/>
+<text class="h" x="450.0" y="146.5" text-anchor="middle">JSON and streaming API</text>
+<text class="m" x="450.0" y="162.5" text-anchor="middle">routes/api.py, request checks</text>
+<rect class="box" x="610" y="124" width="250" height="52" rx="8"/>
+<text class="h" x="735.0" y="146.5" text-anchor="middle">Progress stream (SSE)</text>
+<text class="m" x="735.0" y="162.5" text-anchor="middle">one event per stage, as it happens</text>
+<path class="wire" d="M450,188 L450,214" marker-end="url(#a)"/>
+<rect class="layer" x="10" y="214" width="880" height="118" rx="12"/>
+<text class="lane" x="26" y="236" text-anchor="start">INTELLIGENCE LAYER</text>
+<rect class="box" x="40" y="250" width="150" height="62" rx="8"/>
+<text class="h" x="115.0" y="277.5" text-anchor="middle">Inspect</text>
+<text class="m" x="115.0" y="293.5" text-anchor="middle">what arrived</text>
+<path class="wire" d="M190,281 L210,281" marker-end="url(#a)"/>
+<rect class="key" x="210" y="250" width="150" height="62" rx="8"/>
+<text class="h" x="285.0" y="277.5" text-anchor="middle">Auto-selector</text>
+<text class="m" x="285.0" y="293.5" text-anchor="middle">which models, why</text>
+<path class="wire" d="M360,281 L380,281" marker-end="url(#a)"/>
+<rect class="box" x="380" y="250" width="150" height="62" rx="8"/>
+<text class="h" x="455.0" y="277.5" text-anchor="middle">Orchestrate</text>
+<text class="m" x="455.0" y="293.5" text-anchor="middle">run, skip, re-route</text>
+<path class="wire" d="M530,281 L550,281" marker-end="url(#a)"/>
+<rect class="key" x="550" y="250" width="150" height="62" rx="8"/>
+<text class="h" x="625.0" y="277.5" text-anchor="middle">Refine labels</text>
+<text class="m" x="625.0" y="293.5" text-anchor="middle">cat to lion</text>
+<path class="wire" d="M700,281 L720,281" marker-end="url(#a)"/>
+<rect class="box" x="720" y="250" width="150" height="62" rx="8"/>
+<text class="h" x="795.0" y="277.5" text-anchor="middle">Explain</text>
+<text class="m" x="795.0" y="293.5" text-anchor="middle">every decision</text>
+<path class="wire" d="M450,332 L450,358" marker-end="url(#a)"/>
+<rect class="layer" x="10" y="358" width="880" height="126" rx="12"/>
+<text class="lane" x="26" y="380" text-anchor="start">EXECUTION LAYER: THE PAPER&#x27;S MODELS, RUNNING LOCALLY</text>
+<rect class="box" x="40" y="396" width="88" height="62" rx="8"/>
+<text class="h" x="84.0" y="423.5" text-anchor="middle">ResNet50</text>
+<text class="m" x="84.0" y="439.5" text-anchor="middle">classify</text>
+<rect class="box" x="132.5" y="396" width="88" height="62" rx="8"/>
+<text class="h" x="176.5" y="423.5" text-anchor="middle">YOLOv8n</text>
+<text class="m" x="176.5" y="439.5" text-anchor="middle">detect</text>
+<rect class="box" x="225.0" y="396" width="88" height="62" rx="8"/>
+<text class="h" x="269.0" y="423.5" text-anchor="middle">YOLOv8x</text>
+<text class="m" x="269.0" y="439.5" text-anchor="middle">wildlife</text>
+<rect class="box" x="317.5" y="396" width="88" height="62" rx="8"/>
+<text class="h" x="361.5" y="423.5" text-anchor="middle">PaddleOCR</text>
+<text class="m" x="361.5" y="439.5" text-anchor="middle">read text</text>
+<rect class="box" x="410.0" y="396" width="88" height="62" rx="8"/>
+<text class="h" x="454.0" y="423.5" text-anchor="middle">BLIP-large</text>
+<text class="m" x="454.0" y="439.5" text-anchor="middle">caption</text>
+<rect class="box" x="502.5" y="396" width="88" height="62" rx="8"/>
+<text class="h" x="546.5" y="423.5" text-anchor="middle">NLLB-200</text>
+<text class="m" x="546.5" y="439.5" text-anchor="middle">translate</text>
+<rect class="box" x="595.0" y="396" width="88" height="62" rx="8"/>
+<text class="h" x="639.0" y="423.5" text-anchor="middle">RoBERTa</text>
+<text class="m" x="639.0" y="439.5" text-anchor="middle">sentiment</text>
+<rect class="box" x="687.5" y="396" width="88" height="62" rx="8"/>
+<text class="h" x="731.5" y="423.5" text-anchor="middle">spaCy</text>
+<text class="m" x="731.5" y="439.5" text-anchor="middle">entities</text>
+<rect class="box" x="780.0" y="396" width="88" height="62" rx="8"/>
+<text class="h" x="824.0" y="423.5" text-anchor="middle">T5</text>
+<text class="m" x="824.0" y="439.5" text-anchor="middle">summarise</text>
+<text class="m" x="450" y="476" text-anchor="middle">Loaded once, pre-loaded in the background; int8 on CPU for BLIP, NLLB and T5</text>
+<path class="wire" d="M450,484 L450,510" marker-end="url(#a)"/>
+<rect class="box" x="250" y="510" width="400" height="44" rx="8"/>
+<text class="h" x="450.0" y="528.5" text-anchor="middle">Hugging Face Hub</text>
+<text class="m" x="450.0" y="544.5" text-anchor="middle">weights fetched once while the image builds; none at request time</text>
+</svg>

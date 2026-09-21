@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="700" viewBox="0 0 900 700" role="img" aria-labelledby="t d">
+<title id="t">How an input is routed</title><desc id="d">Images are classified first. A wildlife label skips OCR and switches detection from YOLOv8n to YOLOv8x, then refines the detector&#x27;s coarse label. Otherwise OCR runs; if text covers ten percent or more of the image it is treated as a page and scene analysis is skipped. Documents use their text layer or OCR, then T5 summarises. Text is translated when needed, then spaCy and RoBERTa analyse it. Every path ends in an explanation.</desc>
+<style>
+text{font-family:system-ui,-apple-system,'Segoe UI',sans-serif}
+.h{font-size:13px;font-weight:600;fill:#1f2328}
+.t{font-size:12px;fill:#1f2328}
+.m{font-size:11px;fill:#59636e}
+.lane{font-size:12px;font-weight:600;fill:#59636e;letter-spacing:.04em}
+.box{fill:#f6f8fa;stroke:#d1d9e0;stroke-width:1.25}
+.key{fill:#fff4ef;stroke:#d9541e;stroke-width:1.25}
+.ask{fill:#ffffff;stroke:#d9541e;stroke-width:1.25;stroke-dasharray:4 3}
+.layer{fill:none;stroke:#d1d9e0;stroke-width:1}
+.wire{stroke:#818b98;stroke-width:1.4;fill:none}
+.tip{fill:#818b98}
+.yes{font-size:11px;font-weight:600;fill:#d9541e}
+@media (prefers-color-scheme: dark){
+.h,.t{fill:#e6edf3}
+.m,.lane{fill:#9198a1}
+.box{fill:#161b22;stroke:#3d444d}
+.key{fill:#2a1810;stroke:#e0602a}
+.ask{fill:#0d1117;stroke:#e0602a}
+.layer{stroke:#3d444d}
+.wire{stroke:#768390}
+.tip{fill:#768390}
+.yes{fill:#e0602a}
+}
+</style>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="tip" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<text class="lane" x="20" y="26" text-anchor="start">IMAGE</text>
+<rect class="box" x="20" y="38" width="170" height="56" rx="8"/>
+<text class="h" x="105.0" y="62.5" text-anchor="middle">ResNet50</text>
+<text class="m" x="105.0" y="78.5" text-anchor="middle">classify the subject</text>
+<path class="wire" d="M190,66 L230,66" marker-end="url(#a)"/>
+<rect class="ask" x="230" y="38" width="200" height="56" rx="8"/>
+<text class="h" x="330.0" y="62.5" text-anchor="middle">Wildlife name?</text>
+<text class="m" x="330.0" y="78.5" text-anchor="middle">791-name list, label from ResNet50</text>
+<path class="wire" d="M430,66 L480,66" marker-end="url(#a)"/>
+<text class="yes" x="440" y="58">yes</text>
+<rect class="key" x="480" y="38" width="170" height="56" rx="8"/>
+<text class="h" x="565.0" y="62.5" text-anchor="middle">YOLOv8x</text>
+<text class="m" x="565.0" y="78.5" text-anchor="middle">low threshold, all animals</text>
+<path class="wire" d="M650,66 L690,66" marker-end="url(#a)"/>
+<rect class="key" x="690" y="38" width="190" height="56" rx="8"/>
+<text class="h" x="785.0" y="62.5" text-anchor="middle">Refine + caption</text>
+<text class="m" x="785.0" y="78.5" text-anchor="middle">cat to lion; BLIP with a hint</text>
+<path class="wire" d="M330,94 L330,132" marker-end="url(#a)"/>
+<text class="yes" x="338" y="118">no</text>
+<rect class="box" x="230" y="132" width="200" height="56" rx="8"/>
+<text class="h" x="330.0" y="156.5" text-anchor="middle">PaddleOCR</text>
+<text class="m" x="330.0" y="172.5" text-anchor="middle">English, then Telugu, then Hindi</text>
+<path class="wire" d="M430,160 L480,160" marker-end="url(#a)"/>
+<rect class="ask" x="480" y="132" width="170" height="56" rx="8"/>
+<text class="h" x="565.0" y="156.5" text-anchor="middle">Text covers 10%+?</text>
+<text class="m" x="565.0" y="172.5" text-anchor="middle">of the image area</text>
+<path class="wire" d="M650,160 L690,160" marker-end="url(#a)"/>
+<text class="yes" x="656" y="152">yes</text>
+<rect class="box" x="690" y="132" width="190" height="56" rx="8"/>
+<text class="h" x="785.0" y="156.5" text-anchor="middle">A page, not a scene</text>
+<text class="m" x="785.0" y="172.5" text-anchor="middle">keep the text, skip the rest</text>
+<path class="wire" d="M565,188 L565,226" marker-end="url(#a)"/>
+<text class="yes" x="573" y="212">no</text>
+<rect class="box" x="480" y="226" width="170" height="56" rx="8"/>
+<text class="h" x="565.0" y="250.5" text-anchor="middle">YOLOv8n</text>
+<text class="m" x="565.0" y="266.5" text-anchor="middle">COCO objects, with boxes</text>
+<path class="wire" d="M650,254 L690,254" marker-end="url(#a)"/>
+<rect class="box" x="690" y="226" width="190" height="56" rx="8"/>
+<text class="h" x="785.0" y="250.5" text-anchor="middle">BLIP-large</text>
+<text class="m" x="785.0" y="266.5" text-anchor="middle">one-sentence description</text>
+<line class="layer" x1="10" y1="310" x2="890" y2="310"/>
+<text class="lane" x="20" y="340" text-anchor="start">DOCUMENT (PDF, DOCX)</text>
+<rect class="ask" x="20" y="352" width="170" height="56" rx="8"/>
+<text class="h" x="105.0" y="376.5" text-anchor="middle">Text layer?</text>
+<text class="m" x="105.0" y="392.5" text-anchor="middle">PDF with real text, or DOCX</text>
+<path class="wire" d="M190,380 L230,380" marker-end="url(#a)"/>
+<text class="yes" x="196" y="372">yes</text>
+<rect class="box" x="230" y="352" width="200" height="56" rx="8"/>
+<text class="h" x="330.0" y="376.5" text-anchor="middle">Extract the text</text>
+<text class="m" x="330.0" y="392.5" text-anchor="middle">no OCR needed</text>
+<path class="wire" d="M105,408 L105,446" marker-end="url(#a)"/>
+<text class="yes" x="113" y="432">no</text>
+<rect class="box" x="20" y="446" width="170" height="56" rx="8"/>
+<text class="h" x="105.0" y="470.5" text-anchor="middle">Render pages</text>
+<text class="m" x="105.0" y="486.5" text-anchor="middle">first 15, at 200 DPI</text>
+<path class="wire" d="M190,474 L230,474" marker-end="url(#a)"/>
+<rect class="box" x="230" y="446" width="200" height="56" rx="8"/>
+<text class="h" x="330.0" y="470.5" text-anchor="middle">PaddleOCR</text>
+<text class="m" x="330.0" y="486.5" text-anchor="middle">page by page</text>
+<path class="wire" d="M430,380 L455,380 L455,418 L480,418" marker-end="url(#a)"/>
+<path class="wire" d="M430,474 L455,474 L455,434 L480,434" marker-end="url(#a)"/>
+<rect class="key" x="480" y="398" width="170" height="56" rx="8"/>
+<text class="h" x="565.0" y="422.5" text-anchor="middle">T5 summary</text>
+<text class="m" x="565.0" y="438.5" text-anchor="middle">spread across the document</text>
+<path class="wire" d="M650,426 L690,426" marker-end="url(#a)"/>
+<rect class="box" x="690" y="398" width="190" height="56" rx="8"/>
+<text class="h" x="785.0" y="422.5" text-anchor="middle">Text + summary</text>
+<text class="m" x="785.0" y="438.5" text-anchor="middle">and how it was read</text>
+<line class="layer" x1="10" y1="528" x2="890" y2="528"/>
+<text class="lane" x="20" y="558" text-anchor="start">TEXT</text>
+<rect class="box" x="20" y="570" width="170" height="56" rx="8"/>
+<text class="h" x="105.0" y="594.5" text-anchor="middle">langdetect</text>
+<text class="m" x="105.0" y="610.5" text-anchor="middle">which language</text>
+<path class="wire" d="M190,598 L230,598" marker-end="url(#a)"/>
+<rect class="box" x="230" y="570" width="200" height="56" rx="8"/>
+<text class="h" x="330.0" y="594.5" text-anchor="middle">NLLB-200</text>
+<text class="m" x="330.0" y="610.5" text-anchor="middle">translate if the target differs</text>
+<path class="wire" d="M430,598 L480,598" marker-end="url(#a)"/>
+<rect class="key" x="480" y="570" width="170" height="56" rx="8"/>
+<text class="h" x="565.0" y="594.5" text-anchor="middle">spaCy + RoBERTa</text>
+<text class="m" x="565.0" y="610.5" text-anchor="middle">entities, sentiment</text>
+<path class="wire" d="M650,598 L690,598" marker-end="url(#a)"/>
+<rect class="box" x="690" y="570" width="190" height="56" rx="8"/>
+<text class="h" x="785.0" y="594.5" text-anchor="middle">Findings</text>
+<text class="m" x="785.0" y="610.5" text-anchor="middle">in English, with the reasoning</text>
+<text class="m" x="450" y="676" text-anchor="middle">Every path ends in the same place: a plain-language account of what ran, what was skipped and why.</text>
+</svg>
