@@ -131,3 +131,30 @@ class TestNoSecretsInAssets:
         for pattern in patterns:
             found = re.search(pattern, content, re.I)
             assert not found, f"{name} contains something key-shaped: {found.group(0)[:24]}..."
+
+
+class TestContentSecurityPolicyCompatibility:
+    """The CSP allows scripts only from this origin, so none may be inline.
+
+    An inline theme script once shipped here; the browser blocked it under
+    `script-src 'self'`, and the dark-flash it existed to prevent happened
+    anyway. The Python tests could not see it and the page still returned 200.
+    Only a real browser's console reported it.
+    """
+
+    def test_no_inline_executable_scripts(self):
+        offenders = []
+        for match in re.finditer(r"<script\b([^>]*)>(.*?)</script>", HTML, re.S):
+            attributes, body = match.group(1), match.group(2).strip()
+            if "src=" in attributes:
+                continue
+            # Data blocks are not executed, so the CSP does not apply to them.
+            if re.search(r'type\s*=\s*"application/(ld\+)?json"', attributes):
+                continue
+            if body:
+                offenders.append(body[:60].replace("\n", " "))
+        assert not offenders, f"inline scripts would be blocked by the CSP: {offenders}"
+
+    def test_no_inline_event_handlers(self):
+        handlers = re.findall(r"\son[a-z]+\s*=\s*\"", HTML)
+        assert not handlers, f"inline event handlers are blocked by the CSP: {handlers}"

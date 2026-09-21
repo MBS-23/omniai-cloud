@@ -593,6 +593,8 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
   transition: transform var(--dur-1) var(--ease), background var(--dur-1) var(--ease),
               border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
 }
+/* Links styled as buttons must not inherit the link underline. */
+.btn, .btn:hover, .btn:focus-visible { text-decoration: none; }
 .btn:hover { background: var(--surface-hover); border-color: var(--text-4); transform: translateY(-2px); box-shadow: var(--shadow-2); }
 .btn:active { transform: translateY(0); }
 
