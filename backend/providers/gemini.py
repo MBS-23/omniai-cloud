@@ -88,7 +88,7 @@ class GeminiBackend(Backend):
             user="Classify the main subject of this image.",
             file_path=image_path,
             model=model,
-            max_tokens=200,
+            max_tokens=512,
         )
         label = str(data.get("label") or "unknown").strip().lower()
         return {"label": label or "unknown", "confidence": _clamp_confidence(data.get("confidence"))}
@@ -113,7 +113,10 @@ class GeminiBackend(Backend):
                 ),
                 file_path=image_path,
                 model=self._gemini.reasoning_model,
-                max_tokens=500,
+                # The adjudicator's job is to reason, so let it think at the
+                # model's default depth and give it room to do so.
+                thinking=None,
+                max_tokens=4096,
             )
             verdict["confidence"] = _clamp_confidence(verdict.get("confidence"), first["confidence"])
             return verdict
@@ -137,7 +140,7 @@ class GeminiBackend(Backend):
             system=_DETECT_SYSTEM,
             user=f"Identify the objects in this image. {focus}",
             file_path=image_path,
-            max_tokens=800,
+            max_tokens=1500,
         )
         detections: list[dict[str, Any]] = []
         raw = data.get("objects")
@@ -159,7 +162,9 @@ class GeminiBackend(Backend):
             system=_OCR_SYSTEM,
             user="Transcribe all readable text.",
             file_path=image_path,
-            max_tokens=4000,
+            model=self._gemini.ocr_model,
+            # A full multi-page document can run to thousands of words.
+            max_tokens=16384,
             temperature=0.0,
         ).strip()
 
@@ -188,7 +193,7 @@ class GeminiBackend(Backend):
     def caption_image(self, image_path: str, *, prompt: str | None = None) -> CaptionResult:
         instruction = f"Describe this image. Context hint: {prompt}." if prompt else "Describe this image."
         caption = self._client.generate(
-            system=_CAPTION_SYSTEM, user=instruction, file_path=image_path, max_tokens=200,
+            system=_CAPTION_SYSTEM, user=instruction, file_path=image_path, max_tokens=400,
         ).strip().strip('"')
         if caption:
             caption = caption[0].upper() + caption[1:]
@@ -201,7 +206,7 @@ class GeminiBackend(Backend):
         return self._client.generate(
             system=_SUMMARY_SYSTEM,
             user=f"Summarise the following text.\n\n{text[:30000]}",
-            max_tokens=max(200, min(max_length * 2, 800)),
+            max_tokens=1500,
             temperature=0.3,
         ).strip()
 
@@ -213,7 +218,7 @@ class GeminiBackend(Backend):
         )
         try:
             translated = self._client.generate(
-                system=system, user=text, max_tokens=2000, temperature=0.1,
+                system=system, user=text, max_tokens=4096, temperature=0.1,
             ).strip()
         except BackendUnavailable as error:
             return {
@@ -235,7 +240,7 @@ class GeminiBackend(Backend):
         data = self._client.generate_json(
             system=_ANALYTICS_SYSTEM,
             user=f"Analyse the sentiment and named entities of this text:\n\n{text[:8000]}",
-            max_tokens=1200,
+            max_tokens=2048,
         )
 
         sentiment = str(data.get("sentiment") or "NEUTRAL").strip().upper()

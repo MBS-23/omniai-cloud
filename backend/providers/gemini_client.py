@@ -175,7 +175,14 @@ class GeminiClient:
 
     @staticmethod
     def _text_of(response: dict[str, Any]) -> str:
-        """Pull the generated text out of a response, or explain its absence."""
+        """Pull the generated text out of a response, or explain its absence.
+
+        Gemini 3.x are thinking models, and thinking tokens count against
+        ``maxOutputTokens``. A budget that thinking exhausts returns
+        ``finishReason: MAX_TOKENS`` with no text at all. That must surface as
+        an error: returning "" would put an empty caption or a blank
+        translation on screen as though it were an answer.
+        """
         candidates = response.get("candidates") or []
         if not candidates:
             feedback = response.get("promptFeedback") or {}
@@ -184,8 +191,23 @@ class GeminiClient:
                 raise BackendUnavailable(f"Gemini declined the request ({reason}).")
             return ""
 
-        parts = (candidates[0].get("content") or {}).get("parts") or []
-        return "".join(str(part.get("text", "")) for part in parts).strip()
+        candidate = candidates[0]
+        parts = (candidate.get("content") or {}).get("parts") or []
+        # Thought summaries, if ever returned, are not part of the answer.
+        text = "".join(
+            str(part.get("text", "")) for part in parts if not part.get("thought")
+        ).strip()
+
+        finish = candidate.get("finishReason")
+        if not text and finish == "MAX_TOKENS":
+            thoughts = (response.get("usageMetadata") or {}).get("thoughtsTokenCount", 0)
+            raise BackendUnavailable(
+                "Gemini ran out of output budget before answering "
+                f"({thoughts} tokens spent thinking). Raise max_tokens for this call."
+            )
+        if finish in {"SAFETY", "RECITATION", "PROHIBITED_CONTENT", "BLOCKLIST"}:
+            raise BackendUnavailable(f"Gemini withheld the response ({finish}).")
+        return text
 
     # ------------------------------------------------------------------
     def generate(
@@ -197,8 +219,23 @@ class GeminiClient:
         file_path: str | Path | None = None,
         json_output: bool = False,
         temperature: float = 0.2,
-        max_tokens: int = 800,
+        max_tokens: int = 2048,
+        thinking: str | None = "minimal",
     ) -> str:
+        """Run one generation.
+
+        Args:
+            thinking: ``thinkingConfig.thinkingLevel``. "minimal" suits direct
+                tasks such as classification, OCR and translation: measured on
+                gemini-3.6-flash it drops thinking from ~140 tokens to 0 with the
+                same answer. Pass None to let the model reason at its default
+                depth, which the ensemble's adjudicator does.
+
+                Measured against the live API, the level is the only control
+                that works on every model: ``thinkingBudget: 0`` is rejected by
+                the flash-lite models, and the top-level ``thinking_level``
+                shown in some documentation is rejected by all of them.
+        """
         parts: list[dict[str, Any]] = [{"text": user}]
         if file_path is not None:
             parts.append(_inline_part(file_path))
@@ -207,6 +244,8 @@ class GeminiClient:
             "temperature": temperature,
             "maxOutputTokens": max_tokens,
         }
+        if thinking:
+            config["thinkingConfig"] = {"thinkingLevel": thinking}
         if json_output:
             config["responseMimeType"] = "application/json"
 

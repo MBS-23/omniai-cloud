@@ -120,6 +120,12 @@ class GeminiSettings:
     fast_model: str = "gemini-3.5-flash-lite"
     # Settles disagreements between the two.
     reasoning_model: str = "gemini-3.8-flash"
+    # Transcription, chosen by measurement: on a 15-page PDF it reproduced the
+    # text verbatim in 25 s, where gemini-3.6-flash took 52 s and
+    # gemini-3.5-flash-lite was faster but paraphrased. Verbatim matters for
+    # OCR, and 52 s would not leave room for summarisation inside a 60 s
+    # serverless function.
+    ocr_model: str = "gemini-3.1-flash-lite"
     timeout_seconds: int = 60
 
     @property
@@ -260,6 +266,7 @@ def _build_settings() -> Settings:
             model=_str("OMNIAI_GEMINI_MODEL", "gemini-3.6-flash"),
             fast_model=_str("OMNIAI_GEMINI_FAST_MODEL", "gemini-3.5-flash-lite"),
             reasoning_model=_str("OMNIAI_GEMINI_REASONING_MODEL", "gemini-3.8-flash"),
+            ocr_model=_str("OMNIAI_GEMINI_OCR_MODEL", "gemini-3.1-flash-lite"),
         ),
         hosted_provider=_resolve_hosted_provider(),
         model_dir=model_dir,
