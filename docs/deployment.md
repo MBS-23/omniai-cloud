@@ -50,7 +50,31 @@ never touch the container filesystem.
 | Hugging Face Spaces | good | Docker Space. Set the key as a Space secret, not in the repo. |
 | Google Cloud Run | good | Needs `--min-instances 1` if you want the rate limiter to hold. |
 | A VM with nginx | good | See the proxy section below. |
-| Vercel / Netlify | **no** | Serverless; SSE and the dependency size do not fit. |
+| Vercel | **yes, lite + Gemini** | The configured target. See *Vercel* below. The offline profile cannot run here: no disk for 10 GB of weights. |
+
+### Vercel
+
+The repository is already configured: `pyproject.toml` points Vercel at
+`backend.main:app`, `requirements.txt` installs only the lite profile (about
+57 MB, no PyTorch), and `vercel.json` sets a 60-second function limit.
+
+On Vercel the app detects that it is serverless, defaults to the `lite`
+profile, and writes uploads under `/tmp`. The only thing it needs from you:
+
+| Variable | Value |
+|---|---|
+| `OMNIAI_GEMINI_API_KEY` | a key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+
+Set it in the Vercel dashboard under **Project → Settings → Environment
+Variables**, for Production and Preview, then redeploy. Never commit it.
+
+To deploy: open [vercel.com/new](https://vercel.com/new), import the
+repository, add the variable above before the first deploy, and deploy.
+Every later push to `main` redeploys automatically.
+
+Progress still streams, but the whole analysis must finish inside the
+60-second function limit. Image analysis with the ensemble makes three or four
+model calls, which fits comfortably on Gemini's latency.
 
 ### Fly.io
 
