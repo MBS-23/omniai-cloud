@@ -177,32 +177,24 @@ location / {
 The application already sends `X-Accel-Buffering: no` on stream responses, which
 nginx honours; the explicit directives are belt and braces.
 
-## Scaling, and one real caveat
+## Scaling
 
-**The rate limiter is per process.** It is an in-memory sliding window. Two
-gunicorn workers means a client can make twice the configured number of
-requests. The Dockerfile therefore runs **one worker with eight threads**, which
-is the right shape anyway: in `lite` every request is waiting on an upstream
-API, so threads are cheap and a second process buys nothing.
+Run one worker per container. Each worker loads every model once, so a second
+worker in the same container doubles the memory for no gain on a CPU-bound
+host; `gunicorn.conf.py` sets one worker with four threads. To serve more
+people, run more containers behind a load balancer.
 
-If you need more than one worker or more than one replica, move the limiter to
-shared state before you do. `SlidingWindowRateLimiter` in
-`backend/utils/security.py` is a single class with one method; backing it with
-Redis is a small change. Until then, a platform-level rate limit is a better
-control than adding workers.
-
-**`X-Forwarded-For` is trusted** for client identification when present. That is
-correct behind a proxy you control and wrong if the app is directly exposed,
-where a client can forge the header to evade the limit. Put it behind a proxy,
-or drop that branch in `client_identifier`.
+If the app sits behind reverse proxies, set `OMNIAI_TRUSTED_PROXIES` to how
+many there are (a Hugging Face Space is detected and set to one). Leave it at
+`0` when the app is reached directly.
 
 ## Operating it
 
-Health: `GET /api/health` returns `200` when a backend can serve requests and
-`503` when it cannot. A missing key shows as `503` with `status: degraded`, a
-`detail` saying what to set and where, and the `diagnostics` block described
-under *Vercel*. It reports the profile, the provider, the capability list and
-the upload limit. It never reports a key.
+Health: `GET /api/health` returns `200` with `{"status": "ok"}` when the app
+can serve requests, and `503` when it cannot. On a local profile it also
+reports how many models are in memory and whether start-up loading is still
+running. When something is misconfigured, the reason is written to the log,
+not to the response.
 
 Logs go to stdout, and to `logs/omniai.log` when that directory is writable. In
 a read-only container only stdout is used, which is what platform log collectors

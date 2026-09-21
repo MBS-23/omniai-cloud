@@ -73,9 +73,10 @@ class SlidingWindowRateLimiter:
 
             hits.append(now)
 
-            # Keep the dict from growing without bound on a long-lived process.
+            # Keep the dict from growing without bound on a long-lived process:
+            # drop every client whose most recent request has left the window.
             if len(self._hits) > 4096:
-                for key in [k for k, v in self._hits.items() if not v]:
+                for key in [k for k, v in self._hits.items() if not v or v[-1] < cutoff]:
                     del self._hits[key]
 
 
@@ -143,7 +144,9 @@ def validate_image_dimensions(image_path: str | Path) -> None:
     except UploadRejected:
         raise
     except Exception as error:
-        raise UploadRejected(f"The image could not be read: {error}") from error
+        raise UploadRejected(
+            "The image could not be read. It may be damaged or in an unsupported format."
+        ) from error
     finally:
         Image.MAX_IMAGE_PIXELS = previous
 
@@ -168,15 +171,50 @@ def validate_text(text: str) -> str:
     return cleaned
 
 
-def client_identifier(remote_addr: str | None, forwarded_for: str | None) -> str:
+def client_identifier(
+    remote_addr: str | None, forwarded_for: str | None, trusted_proxies: int = 0
+) -> str:
     """Identify the caller for rate limiting.
 
-    ``X-Forwarded-For`` is only consulted because this is intended to sit
-    behind a reverse proxy in the documented deployment. The leftmost entry is
-    used, and it is a hint, not an authorisation decision.
+    Each proxy appends the address it received the request from, so only the
+    entries added by proxies we run behind can be believed; anything to their
+    left was written by the client and may be invented. With N trusted
+    proxies the caller is the Nth entry from the right. With none, the
+    header is ignored entirely.
     """
-    if forwarded_for:
-        first = forwarded_for.split(",")[0].strip()
-        if first:
-            return first
+    if trusted_proxies > 0 and forwarded_for:
+        entries = [entry.strip() for entry in forwarded_for.split(",") if entry.strip()]
+        if len(entries) >= trusted_proxies:
+            return entries[-trusted_proxies]
     return remote_addr or "unknown"
+
+
+class ServerBusy(RuntimeError):
+    """Every analysis slot is taken. The message is safe to show the user."""
+
+    retry_after = 20
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The server is busy with other analyses. Please try again in a few seconds."
+        )
+
+
+class AnalysisSlots:
+    """Bounds how many analyses run at once.
+
+    Each analysis keeps the CPU busy for seconds. Without a bound, a burst of
+    requests would all run at once and every one of them would slow to a
+    crawl; with one, the excess are told to retry instead.
+    """
+
+    def __init__(self, limit: int, wait_seconds: float = 3.0) -> None:
+        self._slots = threading.BoundedSemaphore(max(1, limit))
+        self._wait = wait_seconds
+
+    def acquire(self) -> None:
+        if not self._slots.acquire(timeout=self._wait):
+            raise ServerBusy()
+
+    def release(self) -> None:
+        self._slots.release()

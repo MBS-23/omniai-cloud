@@ -24,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # Everything the Docker build reads, and nothing else.
-INCLUDE = ["Dockerfile", ".dockerignore", "requirements", "backend"]
+INCLUDE = ["Dockerfile", ".dockerignore", "gunicorn.conf.py", "requirements", "backend"]
 SKIP = shutil.ignore_patterns("__pycache__", "*.pyc", "downloaded_models", "*.pt", "*.safetensors")
 
 

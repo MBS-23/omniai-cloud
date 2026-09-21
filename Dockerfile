@@ -56,6 +56,7 @@ RUN python -m backend.models.fetch_paper
 
 # The application.
 USER root
+COPY --chown=user gunicorn.conf.py ./
 COPY --chown=user backend/ backend/
 RUN mkdir -p /app/temp_uploads /app/logs && chown -R user:user /app/temp_uploads /app/logs
 USER user
@@ -66,6 +67,7 @@ RUN HF_HUB_OFFLINE=1 python -m backend.models.verify_paper
 
 ENV OMNIAI_PROFILE=paper \
     OMNIAI_PRELOAD=all \
+    OMNIAI_RATE_LIMIT_PER_MINUTE=12 \
     OMNIAI_HOST=0.0.0.0 \
     OMNIAI_PORT=7860 \
     HF_HUB_OFFLINE=1 \
@@ -76,14 +78,4 @@ EXPOSE 7860
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
   CMD curl -fsS http://127.0.0.1:7860/api/health || exit 1
 
-# One worker: every model is loaded once per process, so a second worker would
-# double the memory for no gain on a CPU this size. Threads let a health check
-# or a page load through while an analysis is running.
-CMD ["gunicorn", "backend.main:app", \
-     "--bind", "0.0.0.0:7860", \
-     "--workers", "1", \
-     "--threads", "4", \
-     "--worker-class", "gthread", \
-     "--timeout", "600", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-"]
+CMD ["gunicorn", "--config", "gunicorn.conf.py", "backend.main:app"]

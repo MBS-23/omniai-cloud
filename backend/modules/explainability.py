@@ -177,6 +177,8 @@ def generate_explanation(
             )
             summariser = _with({"model": document.get("summary_model")})
             lines.append(f"- A summary was generated from the extracted text{summariser.replace(' with', ' by', 1)}.")
+            if document.get("coverage_note"):
+                lines.append(f"- {document['coverage_note']} Longer scans are read in part to keep analysis quick.")
         elif reason:
             # Extraction failed, so naming the method that did not work would
             # only repeat the reason back.

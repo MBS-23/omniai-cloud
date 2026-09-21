@@ -67,8 +67,7 @@ def _reported(capability: str) -> Callable[[Callable[..., _T]], Callable[..., _T
             except Exception as error:
                 logger.exception("%s failed", capability)
                 raise BackendUnavailable(
-                    f"{capability} failed inside the model ({type(error).__name__}). "
-                    "The other results are unaffected."
+                    f"{capability} could not process this input. The other results are unaffected."
                 ) from error
 
         return wrapper

@@ -40,9 +40,8 @@ are on this machine or behind an API.
 ```
 POST /api/analyze/file/stream
   │
-  ├─ rate limit          sliding window, per client
-  ├─ validate            extension → magic bytes → size → pixel count
-  ├─ persist             uuid-prefixed name in a private temp dir
+  ├─ check               the request and the upload are accepted
+  ├─ persist             a private temporary copy of the upload
   │
   ├─ worker thread ─────────────────────────────┐
   │    run_file_analysis()                      │  emits ProgressEvent
@@ -64,7 +63,7 @@ event is emitted at the moment the corresponding stage actually changes state.
 | Path | Responsibility |
 |---|---|
 | `config.py` | All environment reading. Nothing else calls `os.getenv`. |
-| `app.py` | Application factory, error handlers, security headers |
+| `app.py` | Application factory, error handlers, response headers |
 | `main.py` | Entry point and WSGI target |
 | `agent/auto_selector.py` | Input classification, model sequence selection |
 | `agent/taxonomy.py` | 791 species names, five groups |
@@ -82,7 +81,7 @@ event is emitted at the moment the corresponding stage actually changes state.
 | `modules/hub.py` | Which Hugging Face repository each paper model comes from |
 | `modules/lazy.py` | Load-once model handles (the paper's singleton pattern), under a lock |
 | `models/fetch_paper.py` | Download, and optionally verify, every paper model |
-| `utils/` | Files, PDFs, DOCX, logging, languages, security |
+| `utils/` | Files, PDFs, DOCX, logging, languages, request checks |
 
 ## Design decisions worth knowing
 
@@ -124,10 +123,12 @@ Nothing in the intelligence layer changes.
 
 ## Known limitations
 
-- The rate limiter holds state in process memory, so it weakens in proportion to
-  worker count. See `docs/deployment.md`.
+- One container serves one process; to serve more people, run more
+  containers. See `docs/deployment.md`.
 - `lite` cannot return bounding boxes. The response sets
   `bbox_available: false` and the interface says so rather than drawing boxes it
   cannot justify.
-- Scanned PDFs are rasterised at 200 DPI and capped at 30 pages.
-- Translation truncates at 512 tokens, an NLLB constraint.
+- Scanned PDFs are rasterised at 200 DPI, and OCR reads the first 15 pages
+  (`OMNIAI_MAX_OCR_PAGES`); the result says when it stopped early.
+- Translation splits text at sentence boundaries into pieces NLLB can take
+  whole, so long passages are translated in full.

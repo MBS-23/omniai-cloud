@@ -433,6 +433,7 @@ def _step_document(run: _Run, path: str, metadata: dict[str, Any], floor: int) -
         "summary": summary,
         "summary_generated": bool(doc_result.get("summary_generated")),
         "summary_model": doc_result.get("summary_model"),
+        "coverage_note": doc_result.get("coverage_note"),
         "no_text_reason": doc_result.get("no_text_reason"),
         "text_preview": summary[:1000],
         "insights": doc_result.get("insights", []),

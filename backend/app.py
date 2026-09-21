@@ -12,12 +12,13 @@ from __future__ import annotations
 from typing import Any
 
 from flask import Flask, jsonify, request
+from werkzeug.exceptions import HTTPException
 
 from backend.config import Settings, get_settings
 from backend.providers import build_backend, set_backend
 from backend.utils.file_utils import purge_stale_uploads
 from backend.utils.logger import get_logger
-from backend.utils.security import SlidingWindowRateLimiter
+from backend.utils.security import AnalysisSlots, SlidingWindowRateLimiter
 
 logger = get_logger("OmniAI")
 
@@ -38,6 +39,11 @@ def create_app(settings: Settings | None = None, *, warm: bool = True) -> Flask:
     )
     app.config.update(
         MAX_CONTENT_LENGTH=settings.limits.max_upload_bytes,
+        # A multipart body is parsed before any view runs. Bound how many parts
+        # and how much non-file form data it may carry, so a request cannot
+        # make the parser do unbounded work.
+        MAX_FORM_PARTS=16,
+        MAX_FORM_MEMORY_SIZE=512 * 1024,
         JSON_SORT_KEYS=False,
         OMNIAI_SETTINGS=settings,
     )
@@ -45,6 +51,7 @@ def create_app(settings: Settings | None = None, *, warm: bool = True) -> Flask:
     app.extensions["omniai_rate_limiter"] = SlidingWindowRateLimiter(
         settings.limits.rate_limit_per_minute
     )
+    app.extensions["omniai_analysis_slots"] = AnalysisSlots(settings.max_concurrent)
 
     _register_blueprints(app)
     _register_error_handlers(app)
@@ -74,25 +81,32 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(api)
 
 
+# What a client is told for each HTTP error: enough to act on, nothing about
+# how the server is built.
+_ERROR_MESSAGES = {
+    400: "The request could not be understood.",
+    404: "Not found.",
+    405: "That method is not allowed here.",
+    413: "The upload is too large.",
+    429: "Too many requests. Please wait a moment and try again.",
+}
+
+
 def _register_error_handlers(app: Flask) -> None:
-    def wants_json() -> bool:
-        return request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json"
-
-    @app.errorhandler(404)
-    def not_found(_: Any):
-        if wants_json():
-            return jsonify({"detail": "Not found"}), 404
-        return jsonify({"detail": "Not found"}), 404
-
     @app.errorhandler(413)
     def too_large(_: Any):
         limit = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
         return jsonify({"detail": f"File is too large. The maximum is {limit} MB."}), 413
 
-    @app.errorhandler(500)
-    def server_error(error: Any):
+    @app.errorhandler(HTTPException)
+    def http_error(error: HTTPException):
+        code = error.code or 500
+        return jsonify({"detail": _ERROR_MESSAGES.get(code, "The request could not be completed.")}), code
+
+    @app.errorhandler(Exception)
+    def server_error(error: Exception):
         logger.exception("Unhandled error: %s", error)
-        return jsonify({"detail": "Internal server error"}), 500
+        return jsonify({"detail": "Something went wrong. Please try again."}), 500
 
 
 def _register_security_headers(app: Flask, settings: Settings) -> None:
@@ -134,8 +148,22 @@ def _register_security_headers(app: Flask, settings: Settings) -> None:
             response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault(
-            "Permissions-Policy", "camera=(), microphone=(), geolocation=()"
+            "Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
         )
+        response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+        response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
+        response.headers.setdefault("X-Permitted-Cross-Domain-Policies", "none")
+        if request.path.startswith("/api/"):
+            # Results describe what someone uploaded; no cache should keep them.
+            response.headers.setdefault("Cache-Control", "no-store")
+        forwarded_https = (
+            settings.trusted_proxies > 0
+            and request.headers.get("X-Forwarded-Proto", "").lower() == "https"
+        )
+        if request.is_secure or forwarded_https:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
         if settings.cors_origins:
             origin = request.headers.get("Origin")
             if origin in settings.cors_origins:

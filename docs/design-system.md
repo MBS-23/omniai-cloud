@@ -44,7 +44,7 @@ unreadable text.
 
 ## Type
 
-System stacks: no network request, no CSP exception for a font host, no layout
+System stacks: no network request, no third-party font host, no layout
 shift. `--font-display` is an old-style serif for headlines and figures,
 `--font-body` a grotesque for interface copy, `--font-mono` for anything
 numeric so columns of figures align.
@@ -52,9 +52,8 @@ numeric so columns of figures align.
 Scale is fluid via `clamp()`: `--text-hero` runs 2.75rem → 5.5rem. Body is
 16px at `--leading-body: 1.6`, prose capped at `--measure: 66ch`.
 
-To swap in web fonts: add the link to `index.html`, add the font host to
-`style-src` and `font-src` in `_register_security_headers` (`backend/app.py`),
-and change the two font tokens. Nothing else changes.
+To swap in web fonts: add the link to `index.html`, allow the font host in the
+response headers set in `backend/app.py`, and change the two font tokens.
 
 ## Motion
 

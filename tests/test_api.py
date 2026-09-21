@@ -17,13 +17,12 @@ def _upload(client, filename: str, payload: bytes, endpoint: str = "/api/analyze
 
 
 class TestHealth:
-    def test_reports_profile_and_capabilities(self, client):
+    def test_reports_status_and_nothing_about_configuration(self, client):
         response = client.get("/api/health")
         assert response.status_code == 200
         body = response.get_json()
         assert body["status"] == "ok"
-        assert body["profile"] in {"lite", "paper"}
-        assert "classify_image" in body["capabilities"]
+        assert set(body) <= {"status", "models"}
 
     def test_never_leaks_the_api_key(self, client):
         body = client.get("/api/health").get_data(as_text=True)

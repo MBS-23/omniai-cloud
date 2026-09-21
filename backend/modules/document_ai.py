@@ -62,6 +62,9 @@ def process_document(document_path: str, backend: Backend) -> dict[str, Any]:
     render_dir = None
     # How the backend names its OCR engine and summariser, for the report.
     ocr_engine = getattr(backend, "ocr_label", backend.name)
+    # Set when only part of a long scanned document was read, so the result
+    # says so instead of presenting a partial reading as the whole.
+    coverage_note: str | None = None
     # Set only when OCR actually produced text. The caller used to infer this
     # by searching for "OCR" in extraction_method, which also matched the
     # message saying OCR was unavailable.
@@ -88,6 +91,8 @@ def process_document(document_path: str, backend: Backend) -> dict[str, Any]:
                 document_type = "Scanned or image-based PDF"
                 extraction_method = f"OCR with {ocr_engine}"
                 ocr_used = bool(blocks)
+                if page_count and page_count > len(image_paths):
+                    coverage_note = f"Read the first {len(image_paths)} of {page_count} pages."
             elif source_type == "scanned_pdf" and hasattr(backend, "extract_text_from_pdf"):
                 # No local rasteriser (normal on serverless hosts), but this
                 # backend can read a whole PDF itself, so hand it over.
@@ -98,10 +103,7 @@ def process_document(document_path: str, backend: Backend) -> dict[str, Any]:
                 ocr_used = bool(extracted_text)
             elif source_type == "scanned_pdf":
                 document_type = "Scanned or image-based PDF"
-                extraction_method = (
-                    "Could not be read: this is a scanned PDF, and Poppler, which "
-                    "renders its pages so they can be read, is not installed"
-                )
+                extraction_method = "Could not be read: this scanned PDF cannot be rendered on this server"
             else:
                 document_type = "Text-based PDF"
                 extraction_method = "Embedded text layer (no OCR)"
@@ -162,6 +164,7 @@ def process_document(document_path: str, backend: Backend) -> dict[str, Any]:
             "summary": summary,
             "summary_generated": summary_generated,
             "summary_model": getattr(backend, "summary_label", None),
+            "coverage_note": coverage_note,
             "insights": _derive_insights(extracted_text),
             "language": _detect_language(extracted_text),
             "ocr_used": ocr_used,

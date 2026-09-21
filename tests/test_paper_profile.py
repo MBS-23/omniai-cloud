@@ -202,8 +202,11 @@ def test_a_failing_model_costs_only_its_own_step(monkeypatch):
     monkeypatch.setattr(image_classification, "classify_image", explode)
     backend = PaperBackend.__new__(PaperBackend)
     backend._settings = reload_settings()
-    with pytest.raises(BackendUnavailable, match="Image classification failed"):
+    with pytest.raises(BackendUnavailable, match="Image classification could not process") as caught:
         backend.classify_image("photo.jpg")
+    # The visitor learns which step failed, not how the server is built.
+    assert "NotImplementedError" not in str(caught.value)
+    assert "engine bug" not in str(caught.value)
 
 
 def test_health_reports_loaded_models_when_the_backend_can(client, backend, monkeypatch):
@@ -212,7 +215,7 @@ def test_health_reports_loaded_models_when_the_backend_can(client, backend, monk
         raising=False,
     )
     body = client.get("/api/health").get_json()
-    assert body["models"] == {"models_loaded": ["classify"], "preloading": True}
+    assert body["models"] == {"ready": 1, "loading": True}
 
 
 @pytest.mark.parametrize("model,expected", [

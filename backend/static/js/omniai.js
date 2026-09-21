@@ -574,6 +574,7 @@
         rows.appendChild(row('Extraction', doc.extraction_method));
         if (doc.page_count) rows.appendChild(row('Pages', String(doc.page_count)));
         if (doc.summary_model && doc.summary_generated) rows.appendChild(row('Summariser', doc.summary_model));
+        if (doc.coverage_note) rows.appendChild(row('Coverage', doc.coverage_note));
         body.appendChild(rows);
 
         if (doc.summary) {
@@ -981,14 +982,14 @@
       const models = body && body.models;
       if (!models) return; // A hosted backend has nothing to load.
 
-      const ready = (models.models_loaded || []).length;
-      if (models.preloading) {
+      const base = config.stackLabel || 'Models';
+      if (models.loading) {
         chip.classList.add('chip--warming');
-        label.textContent = `${body.profile} · loading models, ${ready} ready`;
+        label.textContent = `${base} · loading, ${models.ready} ready`;
         window.setTimeout(tick, 4000);
       } else {
         chip.classList.remove('chip--warming');
-        label.textContent = ready ? `${body.profile} · ${ready} models ready` : `${body.profile} · models load on first use`;
+        label.textContent = models.ready ? `${base} · ${models.ready} ready` : `${base} · load on first use`;
       }
     };
     tick();

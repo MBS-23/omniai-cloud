@@ -7,6 +7,11 @@ from backend.utils.pdf_utils import normalize_utf8_text
 
 MAX_DOCX_SIZE_BYTES = 25 * 1024 * 1024
 MAX_DOCX_PARAGRAPHS = 10000
+# A DOCX is a ZIP archive, so a small upload can expand enormously. These cap
+# what may be unpacked before any XML parser sees it.
+MAX_DOCX_UNPACKED_BYTES = 100 * 1024 * 1024
+MAX_DOCX_ENTRIES = 2000
+MAX_DOCX_RATIO = 200
 
 
 def validate_docx_file(docx_path: str) -> dict[str, int]:
@@ -47,9 +52,19 @@ def validate_docx_file(docx_path: str) -> dict[str, int]:
 
     try:
         with ZipFile(path, "r") as archive:
-            names = set(archive.namelist())
+            entries = archive.infolist()
     except BadZipFile as error:
-        raise ValueError(f"Invalid DOCX archive: {error}") from error
+        raise ValueError("This Word document could not be opened. It may be damaged.") from error
+
+    unpacked = sum(entry.file_size for entry in entries)
+    packed = sum(entry.compress_size for entry in entries) or 1
+    if (
+        len(entries) > MAX_DOCX_ENTRIES
+        or unpacked > MAX_DOCX_UNPACKED_BYTES
+        or unpacked / packed > MAX_DOCX_RATIO
+    ):
+        raise ValueError("This Word document is too large or too complex to process.")
+    names = {entry.filename for entry in entries}
 
     required_parts = {"[Content_Types].xml", "word/document.xml"}
     if not required_parts.issubset(names):
@@ -58,7 +73,7 @@ def validate_docx_file(docx_path: str) -> dict[str, int]:
     try:
         document = Document(str(path))
     except Exception as error:
-        raise ValueError(f"Unreadable DOCX document: {error}") from error
+        raise ValueError("This Word document could not be read. It may be damaged.") from error
 
     paragraph_count = len(document.paragraphs)
     if paragraph_count > MAX_DOCX_PARAGRAPHS:

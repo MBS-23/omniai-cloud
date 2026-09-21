@@ -15,10 +15,9 @@ half: a hosted vision model will not give reliable coordinates. The honest
 options are a small detection model invoked as a separate hosted call, or
 leaving `bbox_available: false` and saying so, which is the current behaviour.
 
-### Shared-state rate limiting
-`SlidingWindowRateLimiter` keeps its window in process memory, which caps the
-deployment at one worker. Backing it with Redis removes that ceiling. It is one
-class with one method; see `docs/deployment.md`.
+### Shared state for several containers
+Per-visitor limits are kept in each process. Serving from several containers
+at once would move them to a shared store such as Redis.
 
 ### Result caching
 Hash the upload and the routing decision, cache the result. Re-analysing the
@@ -67,9 +66,9 @@ Explanations today describe *what* ran. LIME or SHAP over the classifier, and
 attention visualisation over the captioner, would explain *why* a prediction was
 made — which is what the paper's citation of LIME actually promises.
 
-### Authentication and per-user quotas
-Necessary before a public URL is shared widely, since every request is billed.
-Session auth plus a per-account quota, reusing the rate limiter's shape.
+### Accounts and per-user quotas
+Sign-in and a per-account quota, for a deployment that needs to know who is
+using it.
 
 ---
 

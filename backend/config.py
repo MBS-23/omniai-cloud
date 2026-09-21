@@ -222,6 +222,12 @@ class Settings:
     # int8 dynamic quantisation of the generative models (BLIP, NLLB, T5) on
     # CPU. Same outputs in testing, three to six times faster.
     quantize: bool = True
+    # Reverse proxies in front of the app that append to X-Forwarded-For.
+    trusted_proxies: int = 0
+    # Analyses allowed to run at once; more are asked to retry shortly.
+    max_concurrent: int = 2
+    # Pages of a scanned PDF that are read with OCR.
+    max_ocr_pages: int = 15
     project_root: Path = field(default=PROJECT_ROOT)
 
     @property
@@ -403,6 +409,10 @@ def _build_settings() -> Settings:
         ocr_langs=tuple(lang.lower() for lang in _csv("OMNIAI_OCR_LANGS")) or ("en",),
         summarizer="mistral" if (_raw("OMNIAI_SUMMARIZER") or "").lower() == "mistral" else "t5",
         quantize=(_raw("OMNIAI_QUANTIZE") or "int8").lower() not in {"none", "off", "false", "0", "fp32"},
+        # A Space sits behind one proxy; elsewhere, trust none unless told to.
+        trusted_proxies=max(0, _int("OMNIAI_TRUSTED_PROXIES", 1 if os.getenv("SPACE_ID") else 0)),
+        max_concurrent=max(1, _int("OMNIAI_MAX_CONCURRENT", 2)),
+        max_ocr_pages=max(1, _int("OMNIAI_MAX_OCR_PAGES", 15)),
     )
 
 

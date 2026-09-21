@@ -154,8 +154,9 @@ class TestKeyDiagnostics:
         assert "nor-this-one" not in str(config.key_diagnostics())
 
 
-def test_health_shows_diagnostics_only_while_unconfigured(client, backend):
-    """A configured deployment must not advertise its variable names."""
-    body = client.get("/api/health").get_json()
-    assert body["status"] == "ok"
-    assert "diagnostics" not in body
+def test_health_never_shows_configuration_even_when_unconfigured(client, backend):
+    """Configuration detail belongs in the operator's log, not the response."""
+    backend.capabilities = lambda: set()
+    response = client.get("/api/health")
+    assert response.status_code == 503
+    assert response.get_json() == {"status": "unavailable"}

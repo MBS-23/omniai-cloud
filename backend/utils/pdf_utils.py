@@ -33,6 +33,7 @@ MAX_PDF_PAGES = 200
 # Pages rendered for OCR. Beyond this the cost is not worth the marginal text.
 MAX_RASTER_PAGES = 30
 RASTER_DPI = 200
+RENDER_TIMEOUT_SECONDS = 120
 
 
 def _poppler_path() -> str | None:
@@ -132,29 +133,28 @@ def extract_images_from_pdf(pdf_path: str) -> tuple[list[Path], Path]:
     that directory and should pass it to :func:`cleanup_render_dir`.
     """
     render_dir = Path(tempfile.mkdtemp(prefix="omniai_pdf_"))
+    last_page = min(MAX_RASTER_PAGES, get_settings().max_ocr_pages)
 
     try:
-        images = convert_from_path(
+        # Pages go straight to files rather than into a list of decoded images,
+        # and the renderer is stopped if one hostile page makes it hang.
+        rendered = convert_from_path(
             pdf_path,
             dpi=RASTER_DPI,
             poppler_path=_poppler_path(),
             first_page=1,
-            last_page=MAX_RASTER_PAGES,
+            last_page=last_page,
+            output_folder=str(render_dir),
+            fmt="png",
+            paths_only=True,
+            timeout=RENDER_TIMEOUT_SECONDS,
         )
     except Exception as error:
         cleanup_render_dir(render_dir)
-        if "poppler" in str(error).lower():
-            raise ValueError(
-                "Scanned PDFs need Poppler, which was not found. Install it and "
-                "either add it to PATH or set OMNIAI_POPPLER_PATH in your .env file."
-            ) from error
-        raise ValueError(f"Could not render PDF pages: {error}") from error
+        logger.warning("PDF rendering failed: %s", error)
+        raise ValueError("The pages of this PDF could not be rendered for reading.") from error
 
-    image_paths: list[Path] = []
-    for index, image in enumerate(images, start=1):
-        image_path = render_dir / f"page_{index:03d}.png"
-        image.save(image_path, "PNG")
-        image_paths.append(image_path)
+    image_paths = sorted(Path(path) for path in rendered)
 
     logger.info("Rendered %s page(s) for OCR", len(image_paths))
     return image_paths, render_dir
