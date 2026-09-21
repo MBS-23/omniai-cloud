@@ -1,73 +1,67 @@
-import logging
-import os
+"""General object detection with YOLOv8n (paper section 4A; Appendix A.2).
 
-from ultralytics import YOLO
+The fast, small detector the auto-selector uses for every image that is not
+a wildlife photograph. Weights come from the Hugging Face Hub copy Ultralytics
+publishes (``Ultralytics/YOLOv8``), rather than from GitHub at first use.
 
-logger = logging.getLogger(__name__)
-_model = None
+The thresholds are the ones in the thesis appendix: a low confidence floor so
+several objects in one scene are all reported, and a looser IoU so overlapping
+objects are not merged.
+"""
 
-def get_model():
-    """Lazy load YOLOv8 model on first request"""
-    global _model
-    if _model is None:
-        os.environ.setdefault("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", "1")
-        logger.info("Loading YOLOv8-nano model...")
-        _model = YOLO("yolov8n.pt")
-        logger.info("✅ YOLOv8-nano loaded")
-    return _model
+from __future__ import annotations
 
-# ---------------- MAIN FUNCTION ----------------
-def detect_objects(image_path: str) -> dict:
-    """
-    Detect objects in an image.
+from typing import Any
 
-    Returns:
-    {
-        "object_count": int,
-        "detections": [
-            {
-                "label": str,
-                "confidence": float,
-                "bbox": [x1, y1, x2, y2]
-            }
-        ]
-    }
-    """
+from backend.modules.hub import PAPER_MODELS, hub_file
+from backend.modules.lazy import Lazy
 
-    # Get lazy-loaded model
-    model = get_model()
-
-    # Adjust detection parameters for better multi-object detection
-    results = model(
-        image_path,
-        conf=0.20,      # Lower threshold to catch more objects
-        iou=0.5,        # Lower IOU for overlapping objects
-        max_det=10,     # Allow multiple detections
-        verbose=False
-    )[0]
-
-    detections = []
-
-    if results.boxes is None:
-        return {
-            "object_count": 0,
-            "detections": []
-        }
-
-    for box in results.boxes:
-        detections.append({
-            "label": model.names[int(box.cls)],
-            "confidence": round(float(box.conf) * 100, 2),
-            "bbox": [round(v, 2) for v in box.xyxy[0].tolist()]
-        })
-
-    return {
-        "object_count": len(detections),
-        "detections": detections
-    }
+CONFIDENCE = 0.20
+IOU = 0.5
+MAX_DETECTIONS = 10
 
 
-# ---------------- LOCAL TEST ----------------
-if __name__ == "__main__":
-    output = detect_objects("test.jpg")
-    print(output)
+def load_yolo(key: str) -> Any:
+    """Load a YOLOv8 checkpoint from the Hub, with Ultralytics' telemetry off."""
+    from ultralytics import YOLO
+
+    try:
+        from ultralytics import settings
+
+        # Ultralytics sends anonymous usage events unless told not to. Nothing
+        # about a user's upload should leave the server, even anonymously.
+        settings.update({"sync": False})
+    except Exception:
+        pass
+
+    spec = PAPER_MODELS[key]
+    return YOLO(hub_file(spec.repo_id, spec.filename), task="detect")
+
+
+def run_yolo(model: Lazy, image_path: str, **options: Any) -> dict[str, Any]:
+    """One detection pass, as the list of labelled boxes the pipeline expects."""
+    yolo = model.get()
+    # Ultralytics predictors hold per-call state; two concurrent calls on one
+    # model object corrupt each other's results.
+    with model.use_lock:
+        result = yolo(image_path, verbose=False, **options)[0]
+
+    detections: list[dict[str, Any]] = []
+    if result.boxes is not None:
+        for box in result.boxes:
+            detections.append({
+                "label": str(yolo.names[int(box.cls)]).lower(),
+                "confidence": round(float(box.conf) * 100, 2),
+                "bbox": [round(float(v), 2) for v in box.xyxy[0].tolist()],
+            })
+
+    detections.sort(key=lambda item: item["confidence"], reverse=True)
+    return {"object_count": len(detections), "detections": detections}
+
+
+MODEL = Lazy("detect", "YOLOv8n", lambda: load_yolo("detect"))
+
+
+def detect_objects(image_path: str) -> dict[str, Any]:
+    """Detect the COCO objects in an image with YOLOv8n."""
+    return run_yolo(MODEL, image_path, conf=CONFIDENCE, iou=IOU, max_det=MAX_DETECTIONS)

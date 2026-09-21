@@ -57,9 +57,9 @@
       <span class="wordmark__sub">Cloud</span>
     </a>
     <div class="masthead__meta">
-      <span class="chip {{ '' if backend_ready else 'chip--degraded' }}"
-            title="Active runtime profile and model backend">
-        <span class="chip__dot"></span>{{ profile }} · {{ backend_name }}
+      <span class="chip {{ '' if backend_ready else 'chip--degraded' }}" id="backendChip"
+            title="Active runtime profile and model backend" aria-live="polite">
+        <span class="chip__dot"></span><span class="chip__label">{{ profile }} · {{ backend_name }}</span>
       </span>
       <span class="chip" title="Species the wildlife router recognises">{{ species_count }} species</span>
       <button type="button" class="theme-toggle" id="themeToggle" aria-label="Switch theme">

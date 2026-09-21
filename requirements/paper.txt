@@ -1,0 +1,41 @@
+# Paper profile: the models published in the OmniAI Cloud paper, run locally.
+#
+#   pip install torch==2.14.0 torchvision==0.29.0 --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements/paper.txt
+#   python -m backend.models.fetch_paper
+#
+# Python 3.10 to 3.13: PaddlePaddle publishes no wheels for 3.14. The Docker
+# image is the supported way to run this profile, and what the public Hugging
+# Face Space serves. Install the CPU build of PyTorch first, as above; the
+# default wheel pulls in about 2.5 GB of CUDA libraries a CPU host never uses.
+#
+# Versions are pinned to the set the image is built and verified with.
+-r base.txt
+
+# --- Deep learning ---------------------------------------------------
+torch==2.14.0
+torchvision==0.29.0
+transformers==5.17.0
+safetensors==0.8.0
+sentencepiece==0.2.2
+huggingface_hub==1.32.0
+
+# --- Vision: YOLOv8n / YOLOv8x ----------------------------------------
+ultralytics==8.4.157
+
+# --- OCR: PaddleOCR 3 with PP-OCRv5 -----------------------------------
+# 3.2, not 3.3: PaddlePaddle 3.3 breaks PP-OCRv5 on oneDNN, the CPU path
+# ("ConvertPirAttribute2RuntimeAttribute not support"), and without oneDNN a
+# page takes two minutes and 3 GB instead of 4 seconds.
+paddlepaddle==3.2.2
+paddleocr==3.7.0
+paddlex==3.7.2
+
+# Ultralytics asks for opencv-python and PaddleX for opencv-contrib-python;
+# both install the same cv2 module. Pinning both to one release keeps the
+# files that end up on disk from mixing two versions.
+opencv-python==4.10.0.84
+opencv-contrib-python==4.10.0.84
+
+# --- NLP: spaCy for entities (the pipeline itself comes from the Hub) ---
+spacy==3.8.16

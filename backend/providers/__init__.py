@@ -25,12 +25,12 @@ def build_backend(settings: Settings | None = None) -> Backend:
         logger.info("Backend: offline (local Hugging Face models, no API key)")
         return OfflineBackend(settings)
 
-    if settings.profile == "full":
-        from backend.providers.local import LocalBackend, ensure_local_importable
+    if settings.profile == "paper":
+        from backend.providers.paper import PaperBackend, ensure_paper_importable
 
-        ensure_local_importable()
-        logger.info("Backend: local (full profile)")
-        return LocalBackend(settings)
+        ensure_paper_importable()
+        logger.info("Backend: paper (the paper's own models, from Hugging Face, no API key)")
+        return PaperBackend(settings)
 
     if settings.hosted_provider == "gemini":
         from backend.providers.gemini import GeminiBackend

@@ -21,8 +21,10 @@ the same way, so the mapping between the two is direct.
                            │  Backend protocol
 ┌──────────────────────────▼───────────────────────────────┐
 │  Execution layer                                         │
-│  backend/providers/local.py    PyTorch, PaddleOCR        │
-│  backend/providers/remote.py   Mistral API               │
+│  backend/providers/paper.py    the paper's models, local │
+│  backend/providers/offline.py  local, Python 3.14 subs   │
+│  backend/providers/gemini.py   hosted: Gemini API        │
+│  backend/providers/remote.py   hosted: Mistral API       │
 │  backend/modules/              the model code itself     │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -69,12 +71,17 @@ event is emitted at the moment the corresponding stage actually changes state.
 | `core/pipeline.py` | Stage orchestration and progress events |
 | `core/labels.py` | COCO → ImageNet label refinement |
 | `providers/base.py` | The `Backend` protocol and result shapes |
-| `providers/local.py` | Adapters over `modules/`, lazy imports |
+| `providers/paper.py` | The paper profile: adapters over `modules/`, background pre-loading |
+| `providers/offline.py` | Local substitutes for Python 3.14 |
+| `providers/gemini.py` | Gemini implementations (lite) |
 | `providers/remote.py` | Mistral implementations |
 | `providers/mistral_client.py` | HTTP, retries, JSON extraction |
 | `routes/api.py` | JSON and SSE endpoints |
 | `routes/views.py` | The one page |
-| `modules/` | Model code: OCR, BLIP, detection, analytics |
+| `modules/` | The paper's model code, one file per model, as in the thesis appendix |
+| `modules/hub.py` | Which Hugging Face repository each paper model comes from |
+| `modules/lazy.py` | Load-once model handles (the paper's singleton pattern), under a lock |
+| `models/fetch_paper.py` | Download, and optionally verify, every paper model |
 | `utils/` | Files, PDFs, DOCX, logging, languages, security |
 
 ## Design decisions worth knowing
@@ -84,10 +91,13 @@ method, not at module scope. Without that, the lite profile could not run on a
 machine with no PyTorch installed, because Python would import the module graph
 regardless of which backend was selected.
 
-**A single warmup, behind a lock.** The original code guarded model loading with
-a bare module-level boolean, read and written without synchronisation, inside a
-route handler. Two concurrent first requests could both see `False` and both
-begin loading several gigabytes. Warmup now happens once, at application
+**Load once, under a lock, in the background.** The original code guarded model
+loading with a bare module-level boolean, read and written without
+synchronisation, inside a route handler. Two concurrent first requests could
+both see `False` and both begin loading several gigabytes. Each model is now a
+`Lazy` handle (`modules/lazy.py`) that builds exactly once behind a lock. The
+paper profile pre-loads them on a background thread, so the server answers
+health checks from its first second while the weights load. Warmup happens once, at application
 construction, behind a lock.
 
 **Progress as data, not decoration.** `ProgressEvent` carries a stage name, a

@@ -18,8 +18,22 @@ def clean_env(monkeypatch):
 
 
 class TestProfileResolution:
-    def test_local_default_is_offline(self, clean_env):
+    @staticmethod
+    def _installed_only(monkeypatch, *present: str) -> None:
+        monkeypatch.setattr(config, "_installed", lambda *modules: all(m in present for m in modules))
+
+    def test_default_is_the_paper_profile_when_its_packages_are_installed(self, clean_env):
+        self._installed_only(clean_env, *config.PAPER_MODULES, *config.OFFLINE_MODULES)
+        assert config._resolve_profile() == "paper"
+
+    def test_default_falls_back_to_offline_without_paddleocr(self, clean_env):
+        """PaddlePaddle has no Python 3.14 wheels; offline still runs there."""
+        self._installed_only(clean_env, *config.OFFLINE_MODULES)
         assert config._resolve_profile() == "offline"
+
+    def test_default_is_lite_with_no_local_models_installed(self, clean_env):
+        self._installed_only(clean_env)
+        assert config._resolve_profile() == "lite"
 
     def test_serverless_default_is_lite(self, clean_env):
         """A serverless host cannot hold the model weights, so default to lite.
@@ -32,16 +46,43 @@ class TestProfileResolution:
 
     def test_explicit_profile_wins_on_serverless(self, clean_env):
         clean_env.setenv("VERCEL", "1")
-        clean_env.setenv("OMNIAI_PROFILE", "full")
-        assert config._resolve_profile() == "full"
+        clean_env.setenv("OMNIAI_PROFILE", "paper")
+        assert config._resolve_profile() == "paper"
 
     @pytest.mark.parametrize("raw,expected", [
-        ("offline", "offline"), ("local", "offline"), ("full", "full"),
-        ("lite", "lite"), ("LITE", "lite"), ("anything-else", "lite"),
+        ("paper", "paper"), ("full", "paper"), ("PAPER", "paper"),
+        ("offline", "offline"), ("local", "offline"),
+        ("lite", "lite"), ("LITE", "lite"),
     ])
     def test_profile_aliases(self, clean_env, raw, expected):
         clean_env.setenv("OMNIAI_PROFILE", raw)
         assert config._resolve_profile() == expected
+
+    def test_unknown_profile_falls_back_to_the_automatic_choice(self, clean_env):
+        self._installed_only(clean_env)
+        clean_env.setenv("OMNIAI_PROFILE", "anything-else")
+        assert config._resolve_profile() == "lite"
+
+
+class TestLocalModelSettings:
+    def test_ocr_languages_come_from_a_comma_list(self, clean_env):
+        clean_env.setenv("OMNIAI_OCR_LANGS", " en, TE ,hi ")
+        assert config.reload_settings().ocr_langs == ("en", "te", "hi")
+
+    def test_ocr_defaults_to_english(self, clean_env):
+        clean_env.delenv("OMNIAI_OCR_LANGS", raising=False)
+        assert config.reload_settings().ocr_langs == ("en",)
+
+    @pytest.mark.parametrize("raw,expected", [("all", "all"), ("none", "none"), ("bogus", "core"), ("", "core")])
+    def test_preload_values(self, clean_env, raw, expected):
+        clean_env.setenv("OMNIAI_PRELOAD", raw)
+        assert config.reload_settings().preload == expected
+
+    def test_summariser_is_local_t5_unless_mistral_is_asked_for(self, clean_env):
+        clean_env.delenv("OMNIAI_SUMMARIZER", raising=False)
+        assert config.reload_settings().summarizer == "t5"
+        clean_env.setenv("OMNIAI_SUMMARIZER", "Mistral")
+        assert config.reload_settings().summarizer == "mistral"
 
 
 class TestHostedProvider:

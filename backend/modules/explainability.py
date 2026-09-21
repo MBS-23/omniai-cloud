@@ -12,6 +12,7 @@ It now receives what was planned, what ran, and what went wrong, and says so.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 # Model identifier -> how to describe it to a person.
@@ -36,6 +37,17 @@ _INPUT_NAMES = {
 
 def _name(model: str) -> str:
     return _MODEL_NAMES.get(model, model.replace("_", " ").capitalize())
+
+
+def _with(result: dict[str, Any] | None) -> str:
+    """ " with YOLOv8x", naming the model a backend reports, or nothing.
+
+    Backends report models as "YOLOv8x (Ultralytics/YOLOv8)"; the repository
+    in brackets is detail for the results panel, not for a sentence.
+    """
+    model = str((result or {}).get("model") or "")
+    model = re.sub(r"\s*\([^()]*/[^()]*\)", "", model).split(", ")[0].strip()
+    return f" with {model}" if model else ""
 
 
 def _list(items: list[str]) -> str:
@@ -79,7 +91,7 @@ def generate_explanation(
             f"The routing agent selected {len(planned)} model"
             f"{'s' if len(planned) != 1 else ''}: {_list([_name(m) for m in planned])}."
         )
-        for reason in (routing_reasons or [])[:4]:
+        for reason in (routing_reasons or [])[:6]:
             lines.append(f"- {reason}")
     elif input_type == "unknown":
         lines.append(
@@ -118,7 +130,7 @@ def generate_explanation(
     classification = results.get("image_classification")
     if classification:
         lines.append(
-            f"- Image classification identified the subject as "
+            f"- Image classification{_with(classification)} identified the subject as "
             f"'{classification.get('label', 'unknown')}' with "
             f"{classification.get('confidence', 0):.2f}% confidence."
         )
@@ -126,7 +138,7 @@ def generate_explanation(
     detection = results.get("object_detection")
     if detection:
         count = detection.get("object_count", len(detection.get("detections", [])))
-        line = f"- Object detection located {count} object(s)."
+        line = f"- Object detection{_with(detection)} located {count} object(s)."
         refinement = detection.get("refinement") or {}
         if refinement.get("applied"):
             changes = refinement.get("changes", [])
@@ -144,12 +156,14 @@ def generate_explanation(
     ocr = results.get("ocr")
     if ocr:
         lines.append(
-            f"- Text extraction read {ocr.get('word_count', 0)} words "
+            f"- Text extraction{_with(ocr)} read {ocr.get('word_count', 0)} words "
             f"({len(ocr.get('text', ''))} characters) from the image."
         )
 
     if results.get("caption"):
-        lines.append("- A vision-language model described the scene in natural language.")
+        lines.append(
+            f"- A vision-language model{_with(results['caption'])} described the scene in natural language."
+        )
 
     document = results.get("document")
     if document:
@@ -161,7 +175,8 @@ def generate_explanation(
                 f"- Document analysis identified the file as {kind} and read it via "
                 f"{document.get('extraction_method', 'automatic extraction')}."
             )
-            lines.append("- A summary was generated from the extracted text.")
+            summariser = _with({"model": document.get("summary_model")})
+            lines.append(f"- A summary was generated from the extracted text{summariser.replace(' with', ' by', 1)}.")
         elif reason:
             # Extraction failed, so naming the method that did not work would
             # only repeat the reason back.
@@ -175,7 +190,7 @@ def generate_explanation(
     translation = results.get("translation")
     if translation:
         lines.append(
-            f"- Translation converted the text from "
+            f"- Translation{_with(translation)} converted the text from "
             f"{translation.get('source_language', 'the detected language')} to "
             f"{translation.get('target_language', 'the target language')}."
         )
@@ -184,7 +199,7 @@ def generate_explanation(
     if analytics:
         entity_count = len(analytics.get("entities", []))
         lines.append(
-            f"- Text analytics found {analytics.get('sentiment', 'unknown').lower()} "
+            f"- Text analytics{_with(analytics)} found {analytics.get('sentiment', 'unknown').lower()} "
             f"sentiment ({analytics.get('sentiment_confidence', 0):.2f}% confidence) "
             f"and extracted {entity_count} named entit"
             f"{'y' if entity_count == 1 else 'ies'}."

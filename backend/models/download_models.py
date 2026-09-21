@@ -1,7 +1,9 @@
-"""Download the models the offline profile needs.
+"""Download the models a local profile needs.
 
-    python -m backend.models.download_models            # everything
-    python -m backend.models.download_models classify   # one capability
+    python -m backend.models.download_models --profile paper            # the paper's models
+    python -m backend.models.download_models --profile paper --verify   # ...and load each once
+    python -m backend.models.download_models            # the offline profile's models
+    python -m backend.models.download_models classify   # one offline capability
     python -m backend.models.download_models --check    # report only
 
 Weights land in the standard Hugging Face cache, so `transformers` finds them
@@ -178,9 +180,23 @@ def report() -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("models", nargs="*", choices=[*MODELS, []],
-                        help="capabilities to fetch (default: all)")
+                        help="offline capabilities to fetch (default: all)")
+    parser.add_argument("--profile", choices=["offline", "paper"], default="offline",
+                        help="which profile's models to fetch")
+    parser.add_argument("--verify", action="store_true",
+                        help="with --profile paper: load and run every model after downloading")
     parser.add_argument("--check", action="store_true", help="report status and exit")
     args = parser.parse_args()
+
+    if args.profile == "paper":
+        from backend.models.fetch_paper import fetch_paper
+
+        status = fetch_paper()
+        if status == 0 and args.verify:
+            from backend.models.verify_paper import verify_paper
+
+            status = verify_paper()
+        return status
 
     if args.check:
         report()

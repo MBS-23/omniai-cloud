@@ -264,6 +264,11 @@ def health() -> Any:
         **settings.describe(),
         "capabilities": sorted(backend.capabilities()),
     }
+    # Local backends report which models are in memory and whether startup
+    # pre-initialisation is still running.
+    status = getattr(backend, "status", None)
+    if callable(status):
+        payload["models"] = status()
     if not ready:
         from backend.config import key_diagnostics
 

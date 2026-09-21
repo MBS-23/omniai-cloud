@@ -4,20 +4,28 @@ Everything the application needs to know about its environment lives here, so
 no module has to reach for ``os.getenv`` on its own. Settings are read once at
 import time and exposed through :func:`get_settings`.
 
-Two runtime profiles are supported:
+Three runtime profiles are supported:
 
-``full``
-    Every model runs locally (ResNet50, YOLOv8, PaddleOCR, BLIP, NLLB, spaCy).
-    This is the configuration described in the OmniAI Cloud paper. It needs
-    Python 3.11 and roughly 6 GB of downloaded weights.
+``paper``
+    The models published in the OmniAI Cloud paper, exactly: ResNet50,
+    YOLOv8n and YOLOv8x, PaddleOCR, BLIP, NLLB-200, spaCy, a RoBERTa sentiment
+    head and T5, all downloaded from Hugging Face and executed in-process. No
+    API key, no rate limit. Runs in the Docker image, which is what the public
+    Hugging Face Space serves. ``full`` is accepted as the older name.
+
+``offline``
+    Also fully local, with substitutes (DETR, EasyOCR, BERT-NER, DistilBART)
+    for the few paper models that publish no wheels for the newest Python.
+    For running natively on Python 3.14.
 
 ``lite``
-    The same pipeline, with model execution delegated to the Mistral API.
-    Small enough to deploy on ordinary hosting and to run on any Python 3.11+.
+    The same pipeline with model execution delegated to a hosted API (Gemini
+    or Mistral). The only profile that fits a serverless function.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import tempfile
 from dataclasses import dataclass, field
@@ -30,7 +38,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 load_dotenv(PROJECT_ROOT / ".env")
 
-Profile = Literal["offline", "full", "lite"]
+Profile = Literal["paper", "offline", "lite"]
 
 # Settings are read as OMNIAI_<NAME>, with fallbacks so a key set under a
 # common alternative name still works. GOOGLE_API_KEY is included because it is
@@ -204,6 +212,16 @@ class Settings:
     model_dir: Path
     poppler_path: str | None
     torch_device: str
+    # Which local models to load at startup rather than on first use:
+    # "all", "core" (OCR and translation, as the paper does) or "none".
+    preload: str = "core"
+    # PaddleOCR language packs to try, in order, for each image.
+    ocr_langs: tuple[str, ...] = ("en",)
+    # "t5" runs the paper's summariser locally; "mistral" uses the hosted one.
+    summarizer: str = "t5"
+    # int8 dynamic quantisation of the generative models (BLIP, NLLB, T5) on
+    # CPU. Same outputs in testing, three to six times faster.
+    quantize: bool = True
     project_root: Path = field(default=PROJECT_ROOT)
 
     @property
@@ -213,7 +231,12 @@ class Settings:
     @property
     def is_offline(self) -> bool:
         """True when no network call is made to serve a request."""
-        return self.profile in {"offline", "full"}
+        return self.profile in {"offline", "paper"}
+
+    @property
+    def on_hf_space(self) -> bool:
+        """True inside a Hugging Face Space, which sets SPACE_ID."""
+        return bool(os.getenv("SPACE_ID"))
 
     @property
     def serverless(self) -> bool:
@@ -240,6 +263,12 @@ class Settings:
         names the host's own settings screen rather than a file that does not
         exist on a serverless platform.
         """
+        if self.profile == "paper":
+            return (
+                "The paper's models are not installed. Run the Docker image "
+                "(`docker compose up --build`), or install requirements/paper.txt on "
+                "Python 3.10 to 3.13 and run `python -m backend.models.download_models --profile paper`."
+            )
         if self.profile != "lite":
             return "The local models are not available. Run `python -m backend.models.download_models`."
 
@@ -263,28 +292,60 @@ class Settings:
             "gemini_configured": self.gemini.configured,
             "hosted_provider": self.hosted_provider if self.profile == "lite" else None,
             "torch_device": self.torch_device,
+            "preload": self.preload if self.profile != "lite" else None,
             "max_upload_mb": round(self.limits.max_upload_bytes / (1024 * 1024), 1),
         }
+
+
+def _installed(*modules: str) -> bool:
+    """Whether every module is importable, without importing any of them."""
+    try:
+        return all(importlib.util.find_spec(module) is not None for module in modules)
+    except (ImportError, ValueError):
+        return False
+
+
+PAPER_MODULES = ("torch", "torchvision", "transformers", "ultralytics", "paddleocr", "spacy")
+OFFLINE_MODULES = ("torch", "transformers", "easyocr")
+
+
+def _default_profile() -> Profile:
+    """The most faithful profile this machine can actually run."""
+    # On a serverless host there is nowhere to keep gigabytes of weights, so the
+    # hosted profile is the only one that can start. Default to it there, so a
+    # missing environment variable cannot take the site down.
+    if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+        return "lite"
+    if _installed(*PAPER_MODULES):
+        return "paper"
+    if _installed(*OFFLINE_MODULES):
+        return "offline"
+    return "lite"
 
 
 def _resolve_profile() -> Profile:
     """Which backend serves requests.
 
-    offline : every model runs locally from cached Hugging Face weights.
-              No API key, no rate limits, no network at request time.
-    full    : the original PyTorch + PaddleOCR stack. Needs Python 3.11.
-    lite    : models served by the Mistral API. Smallest install, deployable.
+    paper   : the paper's own models, local, from Hugging Face. ``full`` is the
+              older name for it.
+    offline : local, with substitutes that install on Python 3.14.
+    lite    : a hosted API. Smallest install, deployable to serverless.
+
+    Unset, it picks the most faithful profile whose packages are installed.
     """
-    # On a serverless host there is nowhere to keep 10 GB of weights, so the
-    # hosted profile is the only one that can start. Default to it there, so a
-    # missing environment variable cannot take the site down.
-    serverless = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
-    raw = _str("OMNIAI_PROFILE", "lite" if serverless else "offline").lower()
+    raw = (_raw("OMNIAI_PROFILE") or "").lower()
+    if raw in {"paper", "full"}:
+        return "paper"
     if raw in {"offline", "local"}:
         return "offline"
-    if raw == "full":
-        return "full"
-    return "lite"
+    if raw == "lite":
+        return "lite"
+    return _default_profile()
+
+
+def _resolve_preload() -> str:
+    raw = (_raw("OMNIAI_PRELOAD") or "core").lower()
+    return raw if raw in {"all", "core", "none"} else "core"
 
 
 def _resolve_hosted_provider() -> str:
@@ -338,6 +399,10 @@ def _build_settings() -> Settings:
         model_dir=model_dir,
         poppler_path=_raw("OMNIAI_POPPLER_PATH"),
         torch_device=_str("OMNIAI_TORCH_DEVICE", "auto").lower(),
+        preload=_resolve_preload(),
+        ocr_langs=tuple(lang.lower() for lang in _csv("OMNIAI_OCR_LANGS")) or ("en",),
+        summarizer="mistral" if (_raw("OMNIAI_SUMMARIZER") or "").lower() == "mistral" else "t5",
+        quantize=(_raw("OMNIAI_QUANTIZE") or "int8").lower() not in {"none", "off", "false", "0", "fp32"},
     )
 
 

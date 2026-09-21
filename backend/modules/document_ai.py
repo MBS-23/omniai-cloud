@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from backend.providers.base import Backend
+from backend.providers.base import Backend, BackendUnavailable
 from backend.utils.docx_utils import extract_text_from_docx, validate_docx_file
 from backend.utils.logger import get_logger
 from backend.utils.pdf_utils import (
@@ -60,6 +60,8 @@ def process_document(document_path: str, backend: Backend) -> dict[str, Any]:
     """Extract, summarise and characterise a PDF or DOCX."""
     extension = Path(document_path).suffix.lower()
     render_dir = None
+    # How the backend names its OCR engine and summariser, for the report.
+    ocr_engine = getattr(backend, "ocr_label", backend.name)
     # Set only when OCR actually produced text. The caller used to infer this
     # by searching for "OCR" in extraction_method, which also matched the
     # message saying OCR was unavailable.
@@ -73,13 +75,18 @@ def process_document(document_path: str, backend: Backend) -> dict[str, Any]:
 
             if source_type == "scanned_pdf" and image_paths:
                 blocks = []
-                for image_path in image_paths:
-                    ocr_result = backend.extract_text(str(image_path))
+                for page_number, image_path in enumerate(image_paths, start=1):
+                    try:
+                        ocr_result = backend.extract_text(str(image_path))
+                    except BackendUnavailable as error:
+                        # One unreadable page should not discard the others.
+                        logger.warning("OCR failed on page %s: %s", page_number, error)
+                        continue
                     if ocr_result.get("has_text"):
                         blocks.append(normalize_utf8_text(ocr_result["text"]))
                 extracted_text = "\n\n".join(blocks)
                 document_type = "Scanned or image-based PDF"
-                extraction_method = f"OCR via {backend.name}"
+                extraction_method = f"OCR with {ocr_engine}"
                 ocr_used = bool(blocks)
             elif source_type == "scanned_pdf" and hasattr(backend, "extract_text_from_pdf"):
                 # No local rasteriser (normal on serverless hosts), but this
@@ -87,7 +94,7 @@ def process_document(document_path: str, backend: Backend) -> dict[str, Any]:
                 ocr_result = backend.extract_text_from_pdf(document_path)
                 extracted_text = ocr_result.get("text", "") if ocr_result.get("has_text") else ""
                 document_type = "Scanned or image-based PDF"
-                extraction_method = f"Whole-document OCR via {backend.name}"
+                extraction_method = f"Whole-document OCR with {ocr_engine}"
                 ocr_used = bool(extracted_text)
             elif source_type == "scanned_pdf":
                 document_type = "Scanned or image-based PDF"
@@ -136,7 +143,12 @@ def process_document(document_path: str, backend: Backend) -> dict[str, Any]:
         if len(normalised) < MIN_SUMMARY_CHARS:
             summary = "The document is very short; the extracted text is shown in full above."
         else:
-            summary = (backend.summarize(extracted_text, max_length=200) or "").strip()
+            try:
+                summary = (backend.summarize(extracted_text, max_length=200) or "").strip()
+            except BackendUnavailable as error:
+                # The extracted text is still the useful part; keep it.
+                logger.warning("Summarisation failed: %s", error)
+                summary = ""
             summary_generated = bool(summary)
 
         if not summary:
@@ -149,6 +161,7 @@ def process_document(document_path: str, backend: Backend) -> dict[str, Any]:
             "page_count": page_count,
             "summary": summary,
             "summary_generated": summary_generated,
+            "summary_model": getattr(backend, "summary_label", None),
             "insights": _derive_insights(extracted_text),
             "language": _detect_language(extracted_text),
             "ocr_used": ocr_used,

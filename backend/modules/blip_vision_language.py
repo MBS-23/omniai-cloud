@@ -1,122 +1,80 @@
+"""Image captioning with BLIP (paper section 4A; Li et al. 2022, ref [7]).
 
-from PIL import Image
-from transformers import BlipForConditionalGeneration, BlipProcessor
+``Salesforce/blip-image-captioning-large``, the checkpoint the original code
+used, with its generation settings: wide beam search for a considered caption,
+a minimum length so it describes rather than labels, and repetition controls
+because BLIP otherwise tends to loop ("a bottle supplement supplement").
+"""
 
-# ---------------- MODEL ----------------
-# Lazy load - models will be initialized on first use
-_processor = None
-_model = None
+from __future__ import annotations
+
+from typing import Any
+
+from backend.modules.hub import PAPER_MODELS
+from backend.modules.lazy import Lazy
 
 
-def _get_blip_models():
-    """
-    Lazy load BLIP processor and model on first use.
-    Prevents 24GB+ download on app import.
-    """
-    global _processor, _model
-    if _processor is None or _model is None:
-        _processor = BlipProcessor.from_pretrained(
-            "Salesforce/blip-image-captioning-large"
-        )
-        _model = BlipForConditionalGeneration.from_pretrained(
-            "Salesforce/blip-image-captioning-large"
-        )
-    return _processor, _model
+def _build() -> tuple[Any, Any]:
+    from transformers import BlipForConditionalGeneration, BlipProcessor
+
+    from backend.utils.cpu import quantize_for_cpu
+
+    repo = PAPER_MODELS["caption"].repo_id
+    processor = BlipProcessor.from_pretrained(repo)
+    model = BlipForConditionalGeneration.from_pretrained(repo)
+    return processor, quantize_for_cpu(model.eval())
+
+
+MODEL = Lazy("caption", "BLIP (large)", _build)
 
 
 def initialize_blip_model() -> None:
-    """
-    Pre-initialize BLIP model at app startup.
-    This prevents 24+ minute delays on first request.
-    """
-    from backend.utils.logger import get_logger
-    logger = get_logger("OmniAI")
-
-    logger.info("Pre-initializing BLIP vision-language model...")
-    _get_blip_models()
-    logger.info("BLIP model initialized successfully")
+    MODEL.get()
 
 
-# ---------------- MAIN FUNCTION ----------------
-def generate_image_caption(image_path: str, prompt: str = None) -> dict:
-    """
-    Generate a detailed human-readable caption for an image.
+def generate_image_caption(image_path: str, prompt: str | None = None) -> dict[str, str]:
+    """Describe an image in one sentence, optionally steered by a text prefix."""
+    import torch
+    from PIL import Image
 
-    Args:
-        image_path: Path to the image
-        prompt: Optional text prompt to guide caption generation
-
-    Returns:
-    {
-        "caption": str
-    }
-    """
-
-    processor, model = _get_blip_models()
+    processor, model = MODEL.get()
     image = Image.open(image_path).convert("RGB")
-
-    # Use conditional caption generation if prompt provided
-    if prompt:
-        inputs = processor(
-            images=image,
-            text=prompt,
-            return_tensors="pt"
-        )
-    else:
-        inputs = processor(
-            images=image,
-            return_tensors="pt"
-        )
-
-    # Generate with improved parameters for more detailed captions
-    output = model.generate(
-        **inputs,
-        max_length=80,          # Longer captions
-        min_length=20,          # More descriptive minimum
-        num_beams=8,            # More beam search for better quality
-        length_penalty=1.2,     # Encourage longer descriptions
-        repetition_penalty=2.0, # Reduced to allow natural repetition
-        no_repeat_ngram_size=2, # Allow some phrase repetition
-        early_stopping=True,
-        temperature=0.7,        # More creative descriptions
-        do_sample=False         # Deterministic for consistency
+    inputs = (
+        processor(images=image, text=prompt, return_tensors="pt")
+        if prompt else
+        processor(images=image, return_tensors="pt")
     )
 
-    caption = processor.decode(
-        output[0],
-        skip_special_tokens=True
-    )
+    with torch.inference_mode():
+        output = model.generate(
+            **inputs,
+            max_length=80,
+            min_length=20,
+            num_beams=8,
+            length_penalty=1.2,
+            repetition_penalty=2.0,
+            no_repeat_ngram_size=2,
+            early_stopping=True,
+            do_sample=False,
+        )
 
-    # Post-processing: Remove consecutive repeated words
-    caption = _remove_repeated_words(caption)
-
-    # Capitalize first letter
+    caption = _remove_repeated_words(processor.decode(output[0], skip_special_tokens=True).strip())
+    # A prompted caption starts by repeating the prompt; the prompt is context,
+    # not part of the description.
+    if prompt and caption.lower().startswith(prompt.lower()):
+        caption = caption[len(prompt):].strip(" ,.")
     if caption:
-        caption = caption[0].upper() + caption[1:] if len(caption) > 1 else caption.upper()
-
-    return {
-        "caption": caption
-    }
+        caption = caption[0].upper() + caption[1:]
+    return {"caption": caption or "No caption could be generated for this image."}
 
 
 def _remove_repeated_words(text: str) -> str:
-    """
-    Remove consecutive repeated words from text.
-    E.g., "a bottle supplement supplement supplement" -> "a bottle supplement"
-    """
+    """Collapse immediate repeats: "a bottle supplement supplement" -> "a bottle supplement"."""
     words = text.split()
     if not words:
         return text
-
-    result = [words[0]]
+    kept = [words[0]]
     for word in words[1:]:
-        if word.lower() != result[-1].lower():
-            result.append(word)
-
-    return " ".join(result)
-
-
-# ---------------- LOCAL TEST ----------------
-if __name__ == "__main__":
-    result = generate_image_caption("test.jpg")
-    print(result)
+        if word.lower() != kept[-1].lower():
+            kept.append(word)
+    return " ".join(kept)

@@ -160,7 +160,7 @@ class MistralClient:
         if not self._settings.api_key:
             raise BackendUnavailable(
                 "No Mistral API key is configured. Add OMNIAI_MISTRAL_API_KEY to "
-                "your .env file, or switch to the 'full' profile to run models locally."
+                "your .env file, or switch to the 'paper' profile to run the paper's models locally."
             )
         return {
             "Authorization": f"Bearer {self._settings.api_key}",

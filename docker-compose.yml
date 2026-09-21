@@ -1,26 +1,26 @@
+# Runs the paper profile: the paper's own models, local, no API key.
+#
+#   docker compose up --build        # then open http://localhost:7860
+#
+# With every model loaded the process needs about 8 GB of memory. On a smaller
+# machine keep OMNIAI_PRELOAD=none, as below, and models load on first use.
 services:
   omniai:
     build: .
-    image: omniai-cloud:lite
+    image: omniai-cloud:paper
     ports:
-      - "8000:8000"
+      - "7860:7860"
     environment:
-      OMNIAI_PROFILE: lite
-      OMNIAI_MISTRAL_API_KEY: ${OMNIAI_MISTRAL_API_KEY:?set OMNIAI_MISTRAL_API_KEY in .env}
-      OMNIAI_RATE_LIMIT_PER_MINUTE: "20"
+      OMNIAI_PRELOAD: ${OMNIAI_PRELOAD:-none}
+      OMNIAI_RATE_LIMIT_PER_MINUTE: "30"
       OMNIAI_MAX_UPLOAD_BYTES: "26214400"
     # Uploads are written to a tmpfs: they are transient, and keeping them off
     # the container filesystem means a crashed request leaves nothing behind.
     tmpfs:
-      - /app/temp_uploads:size=128m
-    read_only: true
+      - /app/temp_uploads:size=256m
+      - /tmp:size=512m
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    volumes:
-      - omniai-logs:/app/logs
     restart: unless-stopped
-
-volumes:
-  omniai-logs:

@@ -22,7 +22,7 @@ class TestHealth:
         assert response.status_code == 200
         body = response.get_json()
         assert body["status"] == "ok"
-        assert body["profile"] in {"lite", "full"}
+        assert body["profile"] in {"lite", "paper"}
         assert "classify_image" in body["capabilities"]
 
     def test_never_leaks_the_api_key(self, client):
@@ -108,6 +108,22 @@ class TestSecurityHeaders:
         assert headers["X-Content-Type-Options"] == "nosniff"
         assert headers["X-Frame-Options"] == "DENY"
         assert "frame-ancestors 'none'" in headers["Content-Security-Policy"]
+
+    def test_only_huggingface_may_frame_the_app_on_a_space(self, monkeypatch, backend):
+        """The Space page embeds the app; no other site may."""
+        from backend.app import create_app
+        from backend.config import reload_settings
+        from backend.providers import reset_backend, set_backend
+
+        monkeypatch.setenv("SPACE_ID", "NanicyberAI/omniai-cloud")
+        application = create_app(reload_settings(), warm=False)
+        set_backend(backend)
+        try:
+            headers = application.test_client().get("/api/health").headers
+        finally:
+            reset_backend()
+        assert "frame-ancestors 'self' https://huggingface.co;" in headers["Content-Security-Policy"]
+        assert "X-Frame-Options" not in headers
 
     def test_csp_allows_no_third_party_scripts(self, client):
         csp = client.get("/api/health").headers["Content-Security-Policy"]

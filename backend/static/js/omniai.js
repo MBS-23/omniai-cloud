@@ -461,6 +461,12 @@
         rows.appendChild(row('Label', titleCase(c.label)));
         rows.appendChild(row('Confidence', confidenceBar(c.confidence, true)));
         if (ens.models) rows.appendChild(row('Models', ens.models.join(', ')));
+        const runnersUp = (c.top_k || []).slice(1, 4);
+        if (runnersUp.length) {
+          rows.appendChild(row('Also considered', runnersUp
+            .map((k) => `${titleCase(k.label)} ${Number(k.confidence).toFixed(1)}%`)
+            .join(' · ')));
+        }
         body.appendChild(rows);
 
         // Show the ensemble's working: what each model said, and how a
@@ -498,9 +504,15 @@
           body.appendChild(banner(
             'info', null,
             'This backend identifies objects but does not return bounding boxes, ' +
-            'so no overlay is shown. Switch to the full profile for localisation.'
+            'so no overlay is shown. The paper profile returns boxes from YOLOv8.'
           ));
           body.appendChild(node('div', 'stage-spacer'));
+        }
+
+        if (d.model) {
+          const rows = node('div', 'rows mb-5');
+          rows.appendChild(row('Model', d.model));
+          body.appendChild(rows);
         }
 
         if (!(d.detections || []).length) {
@@ -528,11 +540,15 @@
     }
 
     if (results.caption) {
-      el.panels.appendChild(panel('Vision–language caption', 'BLIP-class', (body) => {
+      const captionModel = results.caption.model || '';
+      el.panels.appendChild(panel('Vision–language caption', captionModel.split(' (')[0] || 'BLIP', (body) => {
         body.appendChild(node('blockquote', 'quote', results.caption.caption));
-        if (results.caption.original_caption) {
+        if (results.caption.original_caption || captionModel) {
           const rows = node('div', 'rows mt-5');
-          rows.appendChild(row('Before enrichment', results.caption.original_caption));
+          if (results.caption.original_caption) {
+            rows.appendChild(row('Before enrichment', results.caption.original_caption));
+          }
+          if (captionModel) rows.appendChild(row('Model', captionModel));
           body.appendChild(rows);
         }
       }, true, 'i-spark'));
@@ -544,6 +560,8 @@
         const rows = node('div', 'rows');
         if (o.language_hint) rows.appendChild(row('Script', o.language_hint));
         rows.appendChild(row('Characters', String((o.text || '').length)));
+        if (o.mean_confidence != null) rows.appendChild(row('Confidence', confidenceBar(o.mean_confidence, true)));
+        if (o.model) rows.appendChild(row('Model', o.model));
         body.appendChild(rows);
         body.appendChild(node('pre', 'excerpt mt-5', o.text || ''));
       }, true, 'i-text'));
@@ -555,6 +573,7 @@
         const rows = node('div', 'rows');
         rows.appendChild(row('Extraction', doc.extraction_method));
         if (doc.page_count) rows.appendChild(row('Pages', String(doc.page_count)));
+        if (doc.summary_model && doc.summary_generated) rows.appendChild(row('Summariser', doc.summary_model));
         body.appendChild(rows);
 
         if (doc.summary) {
@@ -581,6 +600,11 @@
       const badge = `${languageName(t.source_language)} → ${languageName(t.target_language)}`;
       el.panels.appendChild(panel('Translation', badge, (body) => {
         body.appendChild(node('blockquote', 'quote', t.translated_text));
+        if (t.model) {
+          const rows = node('div', 'rows mt-5');
+          rows.appendChild(row('Model', t.model));
+          body.appendChild(rows);
+        }
       }, true, 'i-globe'));
     }
 
@@ -591,6 +615,7 @@
         rows.appendChild(row('Detected language', languageName(a.original_language)));
         rows.appendChild(row('Sentiment', titleCase(a.sentiment)));
         rows.appendChild(row('Confidence', confidenceBar(a.sentiment_confidence, true)));
+        if (a.model) rows.appendChild(row('Models', a.model));
         body.appendChild(rows);
 
         body.appendChild(node('div', 'label mt-6 mb-3',
@@ -932,7 +957,41 @@
     if (config.backendReady === false) {
       el.analyzeBtn.setAttribute('aria-disabled', 'true');
       el.analyzeBtn.title = 'No model backend is configured';
+    } else {
+      watchWarmup();
     }
+  }
+
+  // After a cold start the local models load in the background. Say so in
+  // the header chip, and how far along it is, until they are all in memory.
+  // A request made meanwhile still works: it waits for the model it needs.
+  function watchWarmup() {
+    const chip = document.getElementById('backendChip');
+    const label = chip && chip.querySelector('.chip__label');
+    if (!label) return;
+
+    const tick = async () => {
+      let body;
+      try {
+        const response = await fetch('/api/health', { cache: 'no-store' });
+        body = await response.json();
+      } catch (error) {
+        return; // Offline or restarting: leave the chip as the server rendered it.
+      }
+      const models = body && body.models;
+      if (!models) return; // A hosted backend has nothing to load.
+
+      const ready = (models.models_loaded || []).length;
+      if (models.preloading) {
+        chip.classList.add('chip--warming');
+        label.textContent = `${body.profile} · loading models, ${ready} ready`;
+        window.setTimeout(tick, 4000);
+      } else {
+        chip.classList.remove('chip--warming');
+        label.textContent = ready ? `${body.profile} · ${ready} models ready` : `${body.profile} · models load on first use`;
+      }
+    };
+    tick();
   }
 
   if (document.readyState === 'loading') {

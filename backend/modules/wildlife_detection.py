@@ -1,75 +1,30 @@
-import logging
-import os
+"""Wildlife detection with YOLOv8x (paper section 4A, "higher-capacity model").
 
-from ultralytics import YOLO
+When the classifier reports an animal from the predefined species list, the
+auto-selector swaps the small detector for this one. The thesis values are
+kept: a very low confidence floor so a partly hidden or distant animal is
+still found, and class-specific NMS so overlapping animals (a herd, a hunt)
+stay separate. Label refinement then replaces COCO's coarse class ("cow",
+"bird") with the classifier's species on the primary subject.
+"""
 
-logger = logging.getLogger(__name__)
-_model = None
+from __future__ import annotations
 
-def get_model():
-    """Lazy load YOLOv8-X model on first request"""
-    global _model
-    if _model is None:
-        os.environ.setdefault("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", "1")
-        logger.info("Loading YOLOv8-X model for wildlife detection...")
-        _model = YOLO("yolov8x.pt")
-        logger.info("✅ YOLOv8-X loaded")
-    return _model
+from typing import Any
+
+from backend.modules.lazy import Lazy
+from backend.modules.object_detection import load_yolo, run_yolo
+
+CONFIDENCE = 0.10
+IOU = 0.45
+MAX_DETECTIONS = 15
+
+MODEL = Lazy("wildlife", "YOLOv8x", lambda: load_yolo("wildlife"))
 
 
-def detect_wildlife(image_path: str) -> dict:
-    """
-    Detect wildlife/animals in an image using YOLOv8x.
-
-    Returns:
-    {
-        "object_count": int,
-        "detections": [
-            {
-                "label": str,
-                "confidence": float,
-                "bbox": [x1, y1, x2, y2]
-            }
-        ]
-    }
-    """
-
-    # Get lazy-loaded model
-    model = get_model()
-
-    # Very low confidence threshold to catch all animals
-    # Lower IOU threshold to detect overlapping animals (hunting scenes)
-    results = model(
-        image_path,
-        conf=0.10,      # Very low - catch everything
-        iou=0.45,       # Lower for close/overlapping objects
-        max_det=15,     # Allow more detections
-        agnostic_nms=False,  # Class-specific NMS
-        verbose=False
-    )[0]
-
-    detections = []
-
-    if results.boxes is None:
-        return {
-            "object_count": 0,
-            "detections": []
-        }
-
-    for box in results.boxes:
-        label = model.names[int(box.cls)]
-        conf = round(float(box.conf) * 100, 2)
-
-        detections.append({
-            "label": label,
-            "confidence": conf,
-            "bbox": [round(v, 2) for v in box.xyxy[0].tolist()]
-        })
-
-        # Debug logging
-        print(f"YOLO detected: {label} ({conf}%)")
-
-    return {
-        "object_count": len(detections),
-        "detections": detections
-    }
+def detect_wildlife(image_path: str) -> dict[str, Any]:
+    """Detect animals in an image with YOLOv8x."""
+    return run_yolo(
+        MODEL, image_path,
+        conf=CONFIDENCE, iou=IOU, max_det=MAX_DETECTIONS, agnostic_nms=False,
+    )

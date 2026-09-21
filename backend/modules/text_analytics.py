@@ -1,70 +1,91 @@
+"""Sentiment and named entities (paper section 4B; Appendix A.5).
 
-import spacy
-from langdetect import detect
-from transformers import pipeline
+The thesis pipeline, unchanged in substance:
 
+1. detect the language with langdetect;
+2. if it is not English, translate to English with NLLB-200, because both
+   downstream models are English models;
+3. extract named entities with spaCy ``en_core_web_sm``;
+4. score sentiment with ``cardiffnlp/twitter-roberta-base-sentiment-latest``,
+   then apply the thesis's calibration for grief-heavy text, which the base
+   model tends to call neutral.
+
+Both models are loaded from the Hugging Face Hub, spaCy's included: its
+``spacy/en_core_web_sm`` repository holds the full pipeline directory, which
+``spacy.load`` reads directly, so no separate model package is installed.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from backend.modules.hub import PAPER_MODELS
+from backend.modules.lazy import Lazy
 from backend.modules.translation_ai import translate_to_english
+from backend.utils.logger import get_logger
 
-# ---------------- LOAD MODELS ----------------
+logger = get_logger("OmniAI.text")
 
-# spaCy for NER
-nlp = spacy.load("en_core_web_sm")
 
-# Sentiment model (3-class: negative/neutral/positive)
-sentiment_pipeline = pipeline(
-    "sentiment-analysis",
-    model="cardiffnlp/twitter-roberta-base-sentiment-latest"
-)
+def _build_ner() -> Any:
+    import spacy
+    from huggingface_hub import snapshot_download
+
+    # The repository also carries the pip wheel of the same pipeline; the
+    # directory is all spacy.load needs.
+    path = snapshot_download(PAPER_MODELS["ner"].repo_id, ignore_patterns=["*.whl"])
+    return spacy.load(path)
+
+
+def _build_sentiment() -> tuple[Any, Any]:
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+    repo = PAPER_MODELS["sentiment"].repo_id
+    tokenizer = AutoTokenizer.from_pretrained(repo)
+    model = AutoModelForSequenceClassification.from_pretrained(repo)
+    return tokenizer, model.eval()
+
+
+NER = Lazy("ner", "spaCy en_core_web_sm", _build_ner)
+SENTIMENT = Lazy("sentiment", "RoBERTa sentiment", _build_sentiment)
 
 
 def _normalize_sentiment_label(raw_label: str) -> str:
     label = (raw_label or "").strip().lower()
-
     if "negative" in label or label in {"label_0", "neg"}:
         return "SAD"
     if "neutral" in label or label in {"label_1", "neu"}:
         return "NEUTRAL"
     if "positive" in label or label in {"label_2", "pos"}:
         return "POSITIVE"
-
     return "NEUTRAL"
 
 
-def _extract_sentiment_scores(result) -> dict[str, float]:
-    """
-    Normalize transformer sentiment outputs into fixed keys:
-    SAD, NEUTRAL, POSITIVE
-    """
+def _sentiment_scores(text: str) -> dict[str, float]:
+    """The model's probability for each of SAD, NEUTRAL and POSITIVE."""
+    import torch
+
+    tokenizer, model = SENTIMENT.get()
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+    with torch.inference_mode():
+        probabilities = model(**inputs).logits.softmax(dim=-1)[0].tolist()
+
     scores = {"SAD": 0.0, "NEUTRAL": 0.0, "POSITIVE": 0.0}
-
-    if not result:
-        return scores
-
-    # Some pipeline versions return [[...]] for single input with top_k=None
-    if isinstance(result, list) and len(result) > 0 and isinstance(result[0], list):
-        items = result[0]
-    elif isinstance(result, list):
-        items = result
-    else:
-        items = [result]
-
-    for item in items:
-        label = _normalize_sentiment_label(item.get("label", ""))
-        score = float(item.get("score", 0.0))
-        scores[label] = max(scores[label], score)
-
+    for index, probability in enumerate(probabilities):
+        label = _normalize_sentiment_label(model.config.id2label[index])
+        scores[label] = max(scores[label], float(probability))
     return scores
 
 
-def _calibrate_sentiment(text: str, model_label: str, model_confidence: float, scores: dict[str, float]) -> tuple[str, float]:
-    """
-    Calibrate sentiment for poetic/grief-heavy text where base model often predicts neutral.
-    """
+def _calibrate_sentiment(
+    text: str, model_label: str, model_confidence: float, scores: dict[str, float]
+) -> tuple[str, float]:
+    """The thesis's correction for poetic or grief-heavy text."""
     lowered = (text or "").lower()
     grief_terms = [
         "grief", "loss", "lost", "alone", "lonely", "broken", "hollow",
         "empty", "wound", "vanished", "missing", "gone", "dark", "tears",
-        "sorrow", "sad", "hurt", "pain", "ache", "mourning", "shadow"
+        "sorrow", "sad", "hurt", "pain", "ache", "mourning", "shadow",
     ]
     grief_hits = sum(1 for term in grief_terms if term in lowered)
 
@@ -72,8 +93,7 @@ def _calibrate_sentiment(text: str, model_label: str, model_confidence: float, s
     neutral_score = scores.get("NEUTRAL", 0.0)
     positive_score = scores.get("POSITIVE", 0.0)
 
-    label = model_label
-    confidence = model_confidence
+    label, confidence = model_label, model_confidence
 
     if label == "NEUTRAL" and grief_hits >= 2 and sad_score >= 0.20:
         label = "SAD"
@@ -90,101 +110,51 @@ def _calibrate_sentiment(text: str, model_label: str, model_confidence: float, s
     return label, confidence
 
 
-# ---------------- MAIN FUNCTION ----------------
-def analyze_text(text: str) -> dict:
-    """
-    Intelligent text analysis with auto language handling.
-
-    Returns:
-    {
-        "original_language": str,
-        "translated_text": str | None,
-        "sentiment": str,
-        "sentiment_confidence": float,
-        "entities": list,
-        "explanation": str
-    }
-    """
-
-    explanation_steps = []
-
-    # 1. Detect language
+def detect_language(text: str) -> str:
     try:
-        language = detect(text)
+        from langdetect import DetectorFactory, detect
+
+        # langdetect is randomised; seeding makes the same text always report
+        # the same language, which the benchmark and the tests rely on.
+        DetectorFactory.seed = 0
+        return detect(text)
     except Exception:
-        language = "unknown"
+        return "unknown"
 
-    explanation_steps.append(f"Detected input language as '{language}'.")
 
-    processed_text = text
-    translated_text = None
+def analyze_text(text: str) -> dict[str, Any]:
+    """Language, sentiment and named entities, with the reasoning spelled out."""
+    steps: list[str] = []
+    language = detect_language(text)
+    steps.append(f"Detected input language as '{language}'.")
 
-    # 2. Translate if not English
-    if language != "en":
-        explanation_steps.append(
-            "Input is not English. Activating translation model to convert text to English."
-        )
-
-        translation_result = translate_to_english(text, source_lang=language)
-        translated_text = translation_result["translated_text"]
-        processed_text = translated_text
-
-        explanation_steps.append(
-            "Text successfully translated to English for downstream NLP tasks."
-        )
+    processed = text
+    translated: str | None = None
+    if language not in {"en", "unknown"}:
+        result = translate_to_english(text, source_lang=language)
+        candidate = (result.get("translated_text") or "").strip()
+        if candidate and candidate != text.strip():
+            translated = processed = candidate
+            steps.append("Translated to English with NLLB-200, because spaCy and RoBERTa are English models.")
+        else:
+            steps.append("Translation to English did not change the text, so it was analysed as written.")
     else:
-        explanation_steps.append(
-            "Input is already in English. Translation not required."
-        )
+        steps.append("Input is English, so no translation was needed.")
 
-    # 3. Named Entity Recognition
-    doc = nlp(processed_text)
-    entities: list[dict] = [
-        {
-            "text": ent.text,
-            "label": ent.label_
-        }
-        for ent in doc.ents
-    ]
+    entities = [{"text": ent.text, "label": ent.label_} for ent in NER.get()(processed).ents]
+    steps.append(f"Extracted {len(entities)} named entities with spaCy en_core_web_sm.")
 
-    explanation_steps.append(
-        f"Extracted {len(entities)} named entities using spaCy NER."
-    )
-
-    # 4. Sentiment Analysis
-    sentiment_distribution = sentiment_pipeline(processed_text[:512], top_k=None)
-    sentiment_scores = _extract_sentiment_scores(sentiment_distribution)
-
-    model_label = max(sentiment_scores, key=sentiment_scores.get)
-    model_confidence = sentiment_scores.get(model_label, 0.0)
-    sentiment_label, sentiment_confidence = _calibrate_sentiment(
-        processed_text,
-        model_label,
-        model_confidence,
-        sentiment_scores
-    )
-
-    explanation_steps.append(
-        "Applied calibrated 3-class sentiment analysis (sad/neutral/positive) on processed text."
-    )
-
-    # 5. Final explanation
-    explanation = " ".join(explanation_steps)
+    scores = _sentiment_scores(processed)
+    model_label = max(scores, key=scores.get)
+    label, confidence = _calibrate_sentiment(processed, model_label, scores[model_label], scores)
+    steps.append("Scored sentiment with RoBERTa (negative, neutral, positive) and applied the thesis calibration.")
 
     return {
         "original_language": language,
-        "translated_text": translated_text,
-        "sentiment": sentiment_label,
-        "sentiment_confidence": round(sentiment_confidence * 100, 2),
+        "translated_text": translated,
+        "sentiment": label,
+        "sentiment_confidence": round(confidence * 100, 2),
+        "sentiment_scores": {name: round(value * 100, 2) for name, value in scores.items()},
         "entities": entities,
-        "explanation": explanation
+        "explanation": " ".join(steps),
     }
-
-
-# ---------------- LOCAL TEST ----------------
-if __name__ == "__main__":
-    sample = "कृत्रिम बुद्धिमत्ता आज कई क्षेत्रों में उपयोग की जा रही है।"
-    result = analyze_text(sample)
-
-    for k, v in result.items():
-        print(f"{k}: {v}")

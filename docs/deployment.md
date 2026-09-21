@@ -1,32 +1,67 @@
 # Deployment
 
-## What can and cannot be deployed
+## Where each profile can run
 
-Only the **`lite` profile** is deployable to ordinary hosting. It has no PyTorch
-dependency and no model weights, so the image is small and starts in about a
-second.
+The **`paper` profile** runs the paper's own models in-process. It needs about
+8 GB of memory with every model loaded and roughly 9 GB of disk for the image,
+and no API key. That fits a **Hugging Face Space** on the free CPU tier (2 vCPU,
+16 GB), or any Docker host with 8 GB or more. It does not fit serverless
+platforms (Vercel, Netlify, Cloudflare Workers): their bundles are capped far
+below the size of the weights.
 
-The **`full` profile carries roughly 6 GB of weights** and wants a GPU. It does
-not fit free or hobby tiers, and it does not fit serverless platforms at all —
-not Vercel, not Netlify, not Cloudflare Workers, all of which cap bundles far
-below this and impose execution limits shorter than a BLIP inference. Run `full`
-locally, or on a GPU VM you control.
+The **`lite` profile** carries no weights and calls a hosted API instead. It is
+the only profile that fits a serverless function, and it is bound by that API's
+rate limits.
+
+## Hugging Face Spaces: the paper profile, live
+
+The repository's `Dockerfile` is a Space-ready image: it listens on 7860, runs
+as uid 1000, fetches every model from the Hub while building, proves each one
+loads with the network off, and pre-loads them all at startup.
+
+1. Log in once, with a token that has **write** access
+   (create one at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)):
+
+   ```bash
+   hf auth login
+   ```
+
+2. Publish:
+
+   ```bash
+   python scripts/deploy_space.py YOUR-USERNAME/omniai-cloud
+   ```
+
+   The script creates a public Docker Space if it does not exist, uploads only
+   what the image needs, and uses `deploy/huggingface/README.md` as the Space
+   card. Run it again to deploy an update.
+
+3. The first build takes about 15 minutes (packages, then about 6 GB of
+   weights). Follow it on the Space's **Logs** tab. When it shows
+   *Running*, the app is at `https://YOUR-USERNAME-omniai-cloud.hf.space`.
+
+Free Spaces sleep after 48 hours without visitors and wake on the next visit;
+waking takes about a minute while the models load. `/api/health` reports
+`"preloading": true` until they are all in memory. Requests that arrive during
+that minute are served as soon as the model they need has loaded.
+
+The app refuses to be framed by any site except `huggingface.co`, and only when
+it detects it is running on a Space (the `SPACE_ID` variable Spaces set).
 
 ## Before you deploy
 
-1. **Use a fresh API key.** Generate one at
-   [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (or
-   [console.mistral.ai](https://console.mistral.ai/api-keys) for Mistral). A key
+1. **Confirm `.env` is ignored.** `git check-ignore .env` should print `.env`.
+2. **Set `OMNIAI_DEBUG=false`.** It defaults to false; confirm it anyway.
+3. **Set a rate limit.** On `paper` it protects a shared CPU from one visitor;
+   on `lite` it also protects your API quota. `OMNIAI_RATE_LIMIT_PER_MINUTE=20`
+   is the default.
+4. **Set `OMNIAI_MAX_UPLOAD_BYTES`** to the smallest value that serves your use.
+5. **For `lite` only: use a fresh API key**, set as a platform secret. A key
    that has ever been pasted into a chat, an issue or a commit should be
-   replaced. Set it as a platform secret, never in the repository.
-2. **Confirm `.env` is ignored.** `git check-ignore .env` should print `.env`.
-3. **Set `OMNIAI_DEBUG=false`.** It defaults to false; confirm it anyway.
-4. **Set a rate limit** you are willing to pay for. Every request in `lite` is a
-   billed API call. `OMNIAI_RATE_LIMIT_PER_MINUTE=20` is the default.
-5. **Set `OMNIAI_MAX_UPLOAD_BYTES`** to the smallest value that serves your use.
+   replaced.
 6. **Run the tests.** `python -m pytest`
 
-## Docker
+## Docker, anywhere
 
 ```bash
 docker compose up --build
@@ -35,24 +70,24 @@ docker compose up --build
 Then check it is healthy:
 
 ```bash
-curl -fsS http://localhost:8000/api/health
+curl -fsS http://localhost:7860/api/health
 ```
 
-The compose file runs the container read-only, drops all capabilities, sets
-`no-new-privileges`, and mounts `/app/temp_uploads` as a 128 MB tmpfs so uploads
-never touch the container filesystem.
+The compose file drops all capabilities, sets `no-new-privileges`, and mounts
+`/app/temp_uploads` as a tmpfs so uploads never touch the container
+filesystem. It sets `OMNIAI_PRELOAD=none` so the image also runs on a laptop
+with less than 8 GB: models then load on first use. Set it to `all` on a host
+with the memory.
 
 ## Platform notes
 
-| Platform | Fit | Notes |
+| Platform | Profile | Notes |
 |---|---|---|
-| Fly.io | good | `fly launch` reads the Dockerfile. Smallest paid VM is enough. |
-| Render | good | Web Service from the Dockerfile. Free tier sleeps; first request is slow. |
-| Railway | good | Detects the Dockerfile. Set the secret in the dashboard. |
-| Hugging Face Spaces | good | Docker Space. Set the key as a Space secret, not in the repo. |
-| Google Cloud Run | good | Needs `--min-instances 1` if you want the rate limiter to hold. |
-| A VM with nginx | good | See the proxy section below. |
-| Vercel | **yes, lite + Gemini** | The configured target. See *Vercel* below. The offline profile cannot run here: no disk for 10 GB of weights. |
+| Hugging Face Spaces | **paper** | Free CPU tier is enough. See above. |
+| A VM or dedicated server | paper | 8 GB of memory or more. See the proxy section below. |
+| Google Cloud Run | paper | 8 GiB memory, `--min-instances 1` if the rate limiter should hold. |
+| Fly.io, Render, Railway | paper on an 8 GB plan, or lite | Their free tiers are too small for the paper's models. |
+| Vercel | lite | Serverless: no room for the weights. See *Vercel* below. |
 
 ### Vercel
 
@@ -112,7 +147,7 @@ fly launch --no-deploy
 ```
 
 ```bash
-fly secrets set OMNIAI_PROFILE=lite OMNIAI_GEMINI_API_KEY=your-key-here
+fly scale memory 8192
 ```
 
 ```bash

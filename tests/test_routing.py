@@ -180,10 +180,57 @@ class TestImagePipeline:
         assert "caption" not in result["results"]
         assert "blip_vision_language" not in result["selected_modules"]
 
+    def test_a_photo_with_a_little_signage_is_still_a_scene(self, backend, scene_image):
+        """Ten words on a bus sign make a photograph with text, not a document.
+
+        The OCR boxes cover a small corner of the 320 x 240 image, so detection
+        and captioning must still run, and the text must still be reported.
+        """
+        backend._overrides["extract_text"] = {
+            "has_text": True,
+            "text": "St Pauls Cathedral Fleet Street Aldwych route 15 via Strand",
+            "lines": ["St Pauls Cathedral", "Fleet Street Aldwych", "route 15 via Strand"],
+            "boxes": [
+                {"text": "St Pauls Cathedral", "bbox": [10, 10, 90, 20]},
+                {"text": "Fleet Street Aldwych", "bbox": [10, 22, 90, 32]},
+                {"text": "route 15 via Strand", "bbox": [10, 34, 90, 44]},
+            ],
+        }
+        result = run_file_analysis(scene_image, backend)
+
+        assert "object_detection" in result["results"]
+        assert "caption" in result["results"]
+        assert result["results"]["ocr"]["text_coverage"] < 10
+        assert any("treated as a photograph" in line for line in result["explanation"].splitlines())
+
+    def test_a_scan_whose_text_fills_the_frame_is_a_document(self, backend, scene_image):
+        backend._overrides["extract_text"] = {
+            "has_text": True,
+            "text": " ".join(f"word{n}" for n in range(12)),
+            "lines": ["a line"],
+            "boxes": [{"text": "a line", "bbox": [0, 0, 320, 120]}],
+        }
+        result = run_file_analysis(scene_image, backend)
+
+        assert "object_detection" not in result["results"]
+        assert "caption" not in result["results"]
+
     def test_scene_image_still_gets_a_caption(self, backend, scene_image):
         """The skip must be specific to text images, not general."""
         result = run_file_analysis(scene_image, backend)
         assert "caption" in result["results"]
+
+    def test_a_confident_short_indic_reading_is_kept(self, backend, scene_image):
+        """Seven Telugu words are a whole sentence; they are not noise."""
+        backend._overrides["extract_text"] = {
+            "has_text": True,
+            "text": "కృత్రిమ మేధస్సు "
+                    "మన జీవితాలను",
+            "lines": ["line"],
+            "mean_confidence": 95.6,
+        }
+        result = run_file_analysis(scene_image, backend)
+        assert "ocr" in result["results"]
 
     def test_trivial_ocr_output_is_discarded(self, backend, scene_image):
         """Three words of noise must not suppress object detection."""

@@ -105,6 +105,12 @@ def _register_security_headers(app: Flask, settings: Settings) -> None:
     # confidence bars set a width per render, and a CSS class cannot express a
     # continuous value. No untrusted input reaches a style attribute: every
     # model-produced string is written with textContent.
+    #
+    # Framing is refused everywhere except inside a Hugging Face Space, whose
+    # page on huggingface.co shows the app in an iframe. There, and only
+    # there, huggingface.co may frame it; any other site still may not.
+    embeddable = settings.on_hf_space
+    frame_ancestors = "'self' https://huggingface.co" if embeddable else "'none'"
     csp = (
         "default-src 'self'; "
         "img-src 'self' data: blob:; "
@@ -113,7 +119,7 @@ def _register_security_headers(app: Flask, settings: Settings) -> None:
         "script-src 'self'; "
         "connect-src 'self'; "
         "object-src 'none'; "
-        "frame-ancestors 'none'; "
+        f"frame-ancestors {frame_ancestors}; "
         "base-uri 'self'; "
         "form-action 'self'"
     )
@@ -122,7 +128,10 @@ def _register_security_headers(app: Flask, settings: Settings) -> None:
     def apply_headers(response):
         response.headers.setdefault("Content-Security-Policy", csp)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "DENY")
+        if not embeddable:
+            # X-Frame-Options cannot name an allowed parent, so on a Space the
+            # CSP frame-ancestors directive above is the control instead.
+            response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault(
             "Permissions-Policy", "camera=(), microphone=(), geolocation=()"

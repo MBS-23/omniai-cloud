@@ -9,7 +9,7 @@ deterministic -- no weights, no API key, no GPU.
 
 It does **not** measure how accurately ResNet50 classifies or YOLOv8 detects.
 Those are properties of the pretrained models, and measuring them needs a
-labelled image corpus and the `full` profile. See `benchmarks/README.md`.
+labelled image corpus and the `paper` profile. See `benchmarks/README.md`.
 
 Cases are generated from the project's own data where possible, so the suite
 cannot drift away from the shipped taxonomy, and hand-written where a specific

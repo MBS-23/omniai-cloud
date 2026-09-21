@@ -32,7 +32,7 @@ motivates, where images arrive in sets from one camera trap.
 
 ### Automatic document cleanup **paper**
 The paper names scan quality as a limitation. Deskew, denoise and binarise
-before OCR. OpenCV is already a `full`-profile dependency, so this costs one
+before OCR. OpenCV is already a `paper`-profile dependency, so this costs one
 preprocessing function and measurably improves OCR on photographed pages.
 
 ---
@@ -95,7 +95,7 @@ what is worth uploading.
 
 ### Self-hosted inference backend
 A third `Backend` implementation targeting a local vLLM or Triton server would
-give the privacy of `full` with the deployability of `lite`. The protocol
+give the privacy of `paper` with the deployability of `lite`. The protocol
 already supports it: one new class, one branch in `build_backend`.
 
 ---

@@ -33,7 +33,7 @@ It does not measure how accurately ResNet50 classifies, how accurately YOLOv8
 detects, or how good a caption BLIP writes. Those are properties of the
 pretrained models, not of this project's code.
 
-Measuring those needs a labelled image corpus and the `full` profile. Nothing
+Measuring those needs a labelled image corpus and the `paper` profile. Nothing
 here should be quoted as a model-accuracy figure.
 
 ## Current results
@@ -74,7 +74,7 @@ means, it should say which.
 **"95% wildlife accuracy".** This benchmark cannot produce that number, because
 it does not run models. It does establish the mechanism the claim rests on:
 refinement is correct on 51 of 51 cases, and secondary subjects are never
-overwritten. To substantiate the accuracy figure, run the `full` profile over a
+overwritten. To substantiate the accuracy figure, run the `paper` profile over a
 labelled wildlife set and report that separately.
 
 ## Bugs this found

@@ -39,6 +39,15 @@ ProgressHook = Callable[["ProgressEvent"], None]
 # Enough extracted text to treat an image as a document rather than a scene.
 _TEXT_CHAR_THRESHOLD = 50
 _TEXT_WORD_THRESHOLD = 10
+# Share of the image the text boxes must cover before an image counts as a
+# page of text (a scan, a screenshot, a notice) rather than a photograph that
+# happens to contain some words, such as a street sign or a bus destination.
+_TEXT_COVERAGE_THRESHOLD = 0.10
+# Past this many words the image is text whatever its layout.
+_MANY_WORDS = 40
+# A shorter reading still counts when the recogniser is this sure of it.
+_CONFIDENT_OCR = 85.0
+_SHORT_TEXT_CHARS = 20
 
 _STAGE_LABELS = {
     "inspect": "Inspecting input",
@@ -87,6 +96,9 @@ class _Run:
     modules: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
+    # Set by the OCR step: the image is a page of text, not a scene, so scene
+    # detection and captioning have nothing to add.
+    text_image: bool = False
     _percent: int = 0
 
     def emit(self, stage: str, status: Status, percent: int | None = None, detail: str | None = None) -> None:
@@ -114,8 +126,48 @@ def _word_count(text: str) -> int:
 
 
 def _has_substantial_text(ocr_result: dict[str, Any]) -> bool:
+    """Real text, as opposed to a few characters of recogniser noise.
+
+    Ten words is a fair floor for English, but a Telugu or Hindi sentence
+    often has fewer, longer words. A reading the recogniser is confident of
+    is kept even when short, provided it is more than a fragment.
+    """
     text = (ocr_result.get("text") or "").strip()
-    return len(text) >= _TEXT_CHAR_THRESHOLD and _word_count(text) >= _TEXT_WORD_THRESHOLD
+    if len(text) >= _TEXT_CHAR_THRESHOLD and _word_count(text) >= _TEXT_WORD_THRESHOLD:
+        return True
+    confidence = ocr_result.get("mean_confidence")
+    return confidence is not None and confidence >= _CONFIDENT_OCR and len(text) >= _SHORT_TEXT_CHARS
+
+
+def _text_coverage(ocr_result: dict[str, Any], path: str) -> float | None:
+    """Fraction of the image covered by text boxes, or None without boxes."""
+    boxes = [box.get("bbox") for box in ocr_result.get("boxes") or [] if box.get("bbox")]
+    if not boxes:
+        return None
+    try:
+        from PIL import Image
+
+        with Image.open(path) as image:
+            area = image.width * image.height
+    except Exception:
+        return None
+    covered = sum(max(0.0, x2 - x1) * max(0.0, y2 - y1) for x1, y1, x2, y2 in (b[:4] for b in boxes))
+    return min(1.0, covered / area) if area else None
+
+
+def _is_text_image(ocr_result: dict[str, Any], path: str) -> bool:
+    """A page of text, as opposed to a photograph with some words in it.
+
+    Word count alone cannot tell the two apart: a street photograph can carry
+    ten words of signage. Where the backend reports where the text is, the
+    share of the image it covers decides; without boxes, the word count does.
+    """
+    words = _word_count(ocr_result.get("text", ""))
+    coverage = _text_coverage(ocr_result, path)
+    ocr_result["text_coverage"] = None if coverage is None else round(coverage * 100, 1)
+    if coverage is None:
+        return True
+    return coverage >= _TEXT_COVERAGE_THRESHOLD or words >= _MANY_WORDS
 
 
 # ======================================================================
@@ -259,6 +311,14 @@ def _step_ocr(run: _Run, path: str, floor: int) -> None:
     except Exception:
         pass
 
+    run.text_image = _is_text_image(ocr_result, path)
+    coverage = ocr_result.get("text_coverage")
+    if coverage is not None and not run.text_image:
+        run.reasons.append(
+            f"Text covers only {coverage}% of the image, so it was treated as a photograph "
+            "with some words in it: objects and a caption were still produced."
+        )
+
     run.results["ocr"] = ocr_result
     run.record("ocr_paddle")
     run.emit("extract_text", "done", floor + 6, detail=f"{ocr_result['word_count']} words")
@@ -266,7 +326,7 @@ def _step_ocr(run: _Run, path: str, floor: int) -> None:
 
 def _step_detect(run: _Run, path: str, floor: int) -> None:
     # An image that turned out to be a page of text needs no object detection.
-    if "ocr" in run.results and _has_substantial_text(run.results["ocr"]):
+    if run.text_image:
         run.emit("object_detection", "skipped", floor + 6, detail="input is text, not a scene")
         return
 
@@ -304,7 +364,7 @@ def _step_caption(run: _Run, path: str, floor: int) -> None:
     # OCR already has its content, and a caption model given a document
     # produces a garbled paraphrase of the words it can partly read. This is
     # the same rule that suppresses object detection for text images.
-    if "ocr" in run.results and _has_substantial_text(run.results["ocr"]):
+    if run.text_image:
         run.emit("caption_image", "skipped", floor + 6, detail="text already extracted")
         return
 
@@ -372,6 +432,7 @@ def _step_document(run: _Run, path: str, metadata: dict[str, Any], floor: int) -
         "extracted_text": doc_result.get("extracted_text", "") if ocr_was_used else "",
         "summary": summary,
         "summary_generated": bool(doc_result.get("summary_generated")),
+        "summary_model": doc_result.get("summary_model"),
         "no_text_reason": doc_result.get("no_text_reason"),
         "text_preview": summary[:1000],
         "insights": doc_result.get("insights", []),

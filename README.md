@@ -9,50 +9,41 @@ every decision it made along the way.
 Department of Artificial Intelligence and Machine Learning,
 Sasi Institute of Technology and Engineering.
 
-**Live:** <https://omniai-cloud.vercel.app> (the `lite` profile on Gemini).
-Check what it is running with [`/api/health`](https://omniai-cloud.vercel.app/api/health).
+**Runs the models published in the paper**: ResNet50, YOLOv8n and YOLOv8x,
+PaddleOCR, BLIP, NLLB-200, spaCy, RoBERTa and T5, downloaded from the Hugging
+Face Hub and executed on the server itself. No API key, no rate limit.
 
 ---
 
 ## Quick start
 
-```bash
-python -m venv .venv
-```
-
-Activate it (`.venv\Scripts\activate` on Windows, `source .venv/bin/activate`
-elsewhere). Then pick a profile.
-
-**Everything on this machine, no API key** (the `offline` profile, the default):
+With Docker (any OS; this is exactly what the hosted Space runs):
 
 ```bash
-pip install -r requirements/offline.txt
+docker compose up --build
+```
+
+Open <http://localhost:7860>. The first build downloads about 6 GB of model
+weights into the image; later builds reuse them. `GET /api/health` lists the
+models in memory and whether startup pre-loading is still running.
+
+Without Docker, on Python 3.10 to 3.13:
+
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 ```
 
 ```bash
-python -m backend.models.download_models
+pip install -r requirements/paper.txt
 ```
-
-**Or a light install that calls a hosted model** (the `lite` profile, what the
-live site runs):
 
 ```bash
-pip install -r requirements/lite.txt
+python -m backend.models.fetch_paper
 ```
-
-Copy `.env.example` to `.env`, set `OMNIAI_PROFILE=lite`, and set
-`OMNIAI_GEMINI_API_KEY` to a key from
-[aistudio.google.com/apikey](https://aistudio.google.com/apikey).
-
-Either way, run:
 
 ```bash
 python -m backend.main
 ```
-
-Open <http://127.0.0.1:8000>. `GET /api/health` reports the active profile and
-capabilities; it answers `503` with a plain-language `detail` when something is
-missing.
 
 ---
 
@@ -61,82 +52,60 @@ missing.
 The same pipeline, the same routing logic and the same explainability output
 run under every profile. Only model execution differs.
 
-| | `offline` (default) | `lite` | `full` |
+| | `paper` (recommended) | `offline` | `lite` |
 |---|---|---|---|
-| Where models run | **This machine** | Gemini API (or Mistral) | This machine |
-| API key | **not required** | required | not required |
-| Rate limits | **none** | yes, per key | none |
-| Python | 3.11 to 3.14 | 3.11 to 3.14 | 3.11 only |
-| Install | ~2.5 GB + 10 GB weights | ~40 MB | ~6 GB weights |
-| Cold start | 20-30 s warmup | under a second | 60-90 s |
-| Bounding boxes | **yes, from DETR** | not available | yes, from YOLO |
-| Works without internet | **yes** | no | yes |
-| Deployable to ordinary hosting | no | **yes, incl. Vercel** | no |
+| Models | **exactly the paper's** | paper's where they install on Python 3.14, substitutes elsewhere | a hosted API |
+| Where models run | **this machine / the Space** | this machine | Gemini or Mistral |
+| API key | **not required** | not required | required |
+| Rate limits | **none** | none | yes, per key |
+| Python | 3.10 to 3.13 (or Docker) | 3.10 to 3.14 | 3.10 to 3.14 |
+| Memory with every model loaded | about 8 GB | about 7 GB | under 200 MB |
+| Bounding boxes | **yes, from YOLOv8** | yes, from DETR | no |
+| Deployable to | Docker hosts, Hugging Face Spaces | a workstation | serverless (Vercel) |
 
-Switch with `OMNIAI_PROFILE` in `.env`.
+Choose with `OMNIAI_PROFILE`. Left unset, the app picks the most faithful
+profile whose packages are installed. `full`, the profile's older name, still
+selects `paper`.
 
-### offline — recommended
-
-Everything runs locally. No key, no quota, no network at request time.
-
-```bash
-pip install -r requirements/offline.txt
-```
-
-```bash
-python -m backend.models.download_models
-```
-
-Roughly 10 GB of weights, downloaded once. Check what is cached with
-`python -m backend.models.download_models --check`.
-
-Inference is CPU-bound by default; a document image takes about 30 s on six
-cores. For a CUDA GPU, install torch from the PyTorch index and set
-`OMNIAI_TORCH_DEVICE=cuda`.
-
-### full — the original PaddleOCR stack
-
-Requires Python 3.11; PaddlePaddle publishes no wheels for 3.12 or later.
-Scanned PDFs additionally need [Poppler](https://poppler.freedesktop.org/) on
-`PATH`, or `OMNIAI_POPPLER_PATH` pointing at its `bin` directory.
+`offline` exists because PaddlePaddle publishes no wheels for Python 3.14: it
+runs natively on a 3.14 machine, with EasyOCR, DETR, BERT-NER and DistilBART
+standing in for the four paper models that do not install there.
 
 ---
 
 ## Models
 
-| Capability | `offline` | `lite` (Gemini) | `full` |
-|---|---|---|---|
-| Image classification | `microsoft/resnet-50` | `gemini-3.6-flash` + `gemini-3.5-flash-lite` ensemble | ResNet50 |
-| Object detection | `facebook/detr-resnet-50` | `gemini-3.6-flash` (no boxes) | YOLOv8n |
-| Wildlife detection | DETR at a lower threshold | `gemini-3.6-flash`, species-focused | YOLOv8x |
-| Text extraction | EasyOCR (CRAFT + CRNN) | `gemini-3.1-flash-lite`, whole PDFs natively | PaddleOCR |
-| Captioning | `blip-image-captioning-base` | `gemini-3.6-flash` | BLIP large |
-| Translation | `nllb-200-distilled-600M` | `gemini-3.6-flash` | NLLB-200 |
-| Sentiment | `twitter-roberta-base-sentiment` | `gemini-3.6-flash` | RoBERTa |
-| Entities | `dslim/bert-base-NER` | `gemini-3.6-flash` | spaCy |
-| Summarisation | `distilbart-cnn-12-6` | `gemini-3.6-flash` | Mistral |
+| Capability | Paper model (`paper` profile) | Hugging Face repository |
+|---|---|---|
+| Image classification | ResNet50, torchvision's ImageNet weights | `timm/resnet50.tv2_in1k` |
+| Object detection | YOLOv8n | `Ultralytics/YOLOv8` |
+| Wildlife detection | YOLOv8x | `Ultralytics/YOLOv8` |
+| Text extraction | PaddleOCR 3, PP-OCRv5 (English, Telugu, Hindi) | `PaddlePaddle/*PP-OCRv5*` |
+| Captioning | BLIP (large) | `Salesforce/blip-image-captioning-large` |
+| Translation | NLLB-200 (distilled 600M) | `facebook/nllb-200-distilled-600M` |
+| Sentiment | RoBERTa | `cardiffnlp/twitter-roberta-base-sentiment-latest` |
+| Named entities | spaCy `en_core_web_sm` | `spacy/en_core_web_sm` |
+| Summarisation | T5 (base) | `google-t5/t5-base` |
+| Language detection | langdetect | (library) |
 
-`lite` falls back to Mistral (`mistral-medium-latest`, `mistral-ocr-latest`)
-when only a Mistral key is set, or when `OMNIAI_HOSTED_PROVIDER=mistral`.
+Settings follow the thesis appendix: YOLOv8n at confidence 0.20, YOLOv8x at
+0.10 for wildlife, BLIP with an 8-beam search, RoBERTa with the thesis's
+sentiment calibration. Summarisation uses T5, as the conference paper
+describes (its reference [9]). The thesis summarised through the Mistral API,
+which is still available with `OMNIAI_SUMMARIZER=mistral` and a key.
 
-DETR emits COCO class names, so the label-refinement step described in the
-paper applies unchanged in the `offline` profile — and unlike the hosted
-backend, it returns real bounding boxes.
+The `paper` profile adds three things the original lacked: translation splits
+long text at sentence boundaries instead of silently truncating at 512 tokens;
+OCR stops trying language packs once one reads the image confidently; and
+every model loads exactly once, under a lock, with the slow ones pre-loaded in
+the background so the server answers from its first second.
 
-`mistral-large` is deliberately not used: it is absent from standard API tiers,
-and selecting a model a key cannot reach fails every request.
+### Hosted API (`lite`)
 
-### Classification ensemble
-
-In `lite`, two vision models classify each image concurrently. When they agree
-the answer is corroborated and confidence is raised; when they disagree a
-reasoning model (`gemini-3.8-flash`) looks at the image and settles it. The interface shows which
-models ran, what each said, and how a disagreement was resolved.
-
-This is the same principle as label refinement: combine independent opinions
-rather than fine-tune. It costs one or two extra API calls per image. Set
-`OMNIAI_ENSEMBLE=false` for a single call. It disables itself automatically
-while the key is being rate limited.
+`lite` runs the same pipeline against Gemini (`gemini-3.6-flash` with a
+two-model classification ensemble) or Mistral. It is the only profile small
+enough for a serverless function, but it is bound by the provider's rate
+limits and is not the paper's model stack.
 
 ---
 
@@ -165,9 +134,8 @@ faster and more specific than running every model on every input:
   has the content, and a caption model given a page of text produces a garbled
   paraphrase of the words it can partly read. On a document image this cuts
   end-to-end time from about 50 s to 30 s.
-- **Animals re-route.** When the classifier reports a species, detection
-  switches to its wildlife setting (YOLOv8x in `full`, DETR at a lower
-  threshold in `offline`, a species-focused prompt in `lite`) and OCR is
+- **Animals re-route.** When ResNet50 reports a species from the wildlife
+  list, detection switches from YOLOv8n to the larger YOLOv8x, and OCR is
   skipped, since wildlife photographs carry no readable text.
 - **Labels are refined.** COCO calls every big cat `cat` and every antelope
   `cow`. The classifier's species label replaces the coarse one on the primary
@@ -206,10 +174,16 @@ pip install -r requirements/dev.txt
 python -m pytest
 ```
 
-127 tests against a scripted backend: no API key, no GPU, no weights. Covers
-routing, label refinement, the classification ensemble, profile and key
-resolution, upload validation, rate limiting, security headers, secret
-redaction, the SSE contract, and static checks on the stylesheet and template.
+167 tests against a scripted backend: no API key, no GPU, no weights. Covers
+routing, label refinement, the paper profile's OCR language search, text
+chunking for NLLB and T5, CPU sizing and failure isolation, the classification
+ensemble, profile and key resolution, upload validation, rate limiting,
+security headers, secret redaction, the SSE contract, and static checks on the
+stylesheet and template.
+
+The models themselves are checked where they run: the Docker build loads every
+one with the network switched off and runs OCR and detection on a sample image
+(`python -m backend.models.verify_paper`), and fails if any of them cannot.
 
 ---
 
@@ -272,8 +246,20 @@ rate-limit caveat, and what to change before going public.
 
 ## Licence and attribution
 
-Academic project. The pretrained models carry their own licences: ResNet50 and
-YOLOv8 (AGPL-3.0 for Ultralytics), BLIP (BSD-3-Clause), NLLB-200
-(CC-BY-NC-4.0, **non-commercial**), PaddleOCR (Apache-2.0). NLLB's
-non-commercial clause applies to the `offline` and `full` profiles; check it
+Academic project. The pretrained models carry their own licences, as published
+on their Hugging Face model cards:
+
+| Model | Licence |
+|---|---|
+| ResNet50 (`timm/resnet50.tv2_in1k`) | BSD-3-Clause |
+| YOLOv8n, YOLOv8x (`Ultralytics/YOLOv8`) | AGPL-3.0 |
+| PaddleOCR PP-OCRv5 | Apache-2.0 |
+| BLIP (`Salesforce/blip-image-captioning-large`) | BSD-3-Clause |
+| NLLB-200 (`facebook/nllb-200-distilled-600M`) | CC-BY-NC-4.0, **non-commercial** |
+| RoBERTa sentiment (`cardiffnlp/twitter-roberta-base-sentiment-latest`) | CC-BY-4.0 |
+| spaCy `en_core_web_sm` | MIT |
+| T5 (`google-t5/t5-base`) | Apache-2.0 |
+
+NLLB's non-commercial clause and Ultralytics' AGPL (which requires the source
+of a network service using it to be available, as it is here) both matter
 before any commercial deployment.

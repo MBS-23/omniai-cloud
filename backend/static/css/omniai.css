@@ -518,6 +518,8 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
   animation: pulse-dot 2.4s var(--ease) infinite;
 }
 .chip--degraded .chip__dot { background: var(--warn); animation-name: pulse-dot-warn; }
+/* Local models still loading after a cold start: amber, and a faster pulse. */
+.chip--warming .chip__dot { background: var(--warn); animation: pulse-dot-warn 1.1s var(--ease) infinite; }
 
 .theme-toggle {
   display: inline-grid; place-items: center;
