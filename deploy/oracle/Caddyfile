@@ -1,0 +1,24 @@
+{$SITE_ADDRESS} {
+	request_body {
+		max_size 26MB
+	}
+
+	reverse_proxy omniai:7860 {
+		# Progress events are streamed; send each one as soon as it exists.
+		flush_interval -1
+		transport http {
+			read_timeout 10m
+			write_timeout 10m
+		}
+	}
+
+	header {
+		-Server
+		-Via
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

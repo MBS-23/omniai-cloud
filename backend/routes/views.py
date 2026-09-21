@@ -38,6 +38,8 @@ def home() -> str:
             else "Analysis is temporarily unavailable. Please try again later."
         ),
         species_count=SPECIES_COUNT,
+        capability_count=len(backend.capabilities()),
+        language_count=len(translation_codes()),
         max_upload_mb=round(settings.limits.max_upload_bytes / (1024 * 1024)),
         max_text_chars=settings.limits.max_text_chars,
     )

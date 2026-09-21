@@ -9,6 +9,7 @@ place means one cache, one download step at image build time, and one switch,
 
 from __future__ import annotations
 
+import platform
 from dataclasses import dataclass
 
 
@@ -53,11 +54,12 @@ PADDLE_OCR_OPTIONS: dict[str, object] = {
     "use_doc_unwarping": False,
     # The original's use_angle_cls=True: reads rotated text lines.
     "use_textline_orientation": True,
-    # oneDNN is what makes CPU inference fast: 3.4 s for a page against 117 s
-    # and 3 GB without it. PaddlePaddle 3.3 broke it for PP-OCRv5
+    # oneDNN is what makes CPU inference fast on x86: 3.4 s for a page against
+    # 117 s and 3 GB without it. PaddlePaddle 3.3 broke it for PP-OCRv5
     # ("ConvertPirAttribute2RuntimeAttribute not support"), which is why
-    # requirements/paper.txt pins 3.2.
-    "enable_mkldnn": True,
+    # requirements/paper.txt pins 3.2. PaddlePaddle's ARM builds have no
+    # oneDNN, so it is only requested on x86.
+    "enable_mkldnn": platform.machine().lower() in {"x86_64", "amd64"},
     "device": "cpu",
 }
 

@@ -1,0 +1,48 @@
+# OmniAI Cloud on one Ubuntu server (an Oracle Cloud Ampere A1 VM, or any
+# machine with 8 GB of memory or more).
+#
+#   SITE_ADDRESS=203-0-113-9.sslip.io docker compose up -d --build
+#
+# Caddy is the only thing reachable from outside: it obtains and renews the
+# HTTPS certificate and passes requests to the app on the private network.
+
+services:
+  omniai:
+    build:
+      context: ../..
+    image: omniai-cloud:paper
+    restart: unless-stopped
+    environment:
+      # Caddy is the one proxy in front of the app.
+      OMNIAI_TRUSTED_PROXIES: "1"
+      OMNIAI_PRELOAD: all
+      OMNIAI_MAX_CONCURRENT: "2"
+    expose:
+      - "7860"
+    tmpfs:
+      - /app/temp_uploads:size=256m
+      - /tmp:size=1g
+    mem_limit: 20g
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - omniai
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS, for example 203-0-113-9.sslip.io}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

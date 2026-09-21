@@ -3,21 +3,62 @@
 ## Where each profile can run
 
 The **`paper` profile** runs the paper's own models in-process. It needs about
-8 GB of memory with every model loaded and roughly 9 GB of disk for the image,
-and no API key. That fits a **Hugging Face Space** on the free CPU tier (2 vCPU,
-16 GB), or any Docker host with 8 GB or more. It does not fit serverless
-platforms (Vercel, Netlify, Cloudflare Workers): their bundles are capped far
-below the size of the weights.
+8 GB of memory with every model loaded, roughly 10 GB of disk for the image,
+and no API key. It fits any Linux server or VM with that much memory; the
+free one used here is an Oracle Cloud Ampere A1 instance. It does not fit
+serverless platforms (Vercel, Netlify, Cloudflare Workers), whose bundles are
+capped far below the size of the weights.
 
 The **`lite` profile** carries no weights and calls a hosted API instead. It is
 the only profile that fits a serverless function, and it is bound by that API's
 rate limits.
 
-## Hugging Face Spaces: the paper profile, live
+## Oracle Cloud: the paper profile, live, free
+
+Oracle's Always Free tier includes Ampere A1 capacity of 4 cores and 24 GB of
+memory, enough for every model with room to spare. PyTorch, PaddlePaddle,
+OpenCV and spaCy all publish ARM64 builds, so the same Dockerfile builds there
+natively.
+
+1. **Create the account** at [signup.cloud.oracle.com](https://signup.cloud.oracle.com).
+   Oracle verifies a card but does not charge Always Free resources.
+2. **Create the instance**: Compute, Instances, Create instance.
+   - Image: Canonical Ubuntu 24.04 (the aarch64 build is chosen automatically
+     for the shape below).
+   - Shape: `VM.Standard.A1.Flex`, 4 OCPUs, 24 GB memory.
+   - Boot volume: 100 GB.
+   - SSH keys: paste the public half of your deploy key.
+   If the console reports "out of capacity", pick another availability domain
+   or try again later; free A1 capacity is released continuously.
+3. **Open HTTP and HTTPS**: Networking, the instance's virtual cloud network,
+   its security list, Add ingress rules: source `0.0.0.0/0`, TCP, destination
+   ports `80` and `443`.
+4. **Deploy** from your machine, with the instance's public IP:
+
+   ```bash
+   bash scripts/deploy_oracle.sh 203.0.113.9 ~/.ssh/omniai_oracle
+   ```
+
+   It sends the committed code, installs updates, Docker and the firewall
+   rules, builds the image on the server (the first build downloads about
+   6 GB of models) and starts it behind Caddy, which obtains an HTTPS
+   certificate automatically. The site is served at
+   `https://203-0-113-9.sslip.io`: sslip.io is a public DNS name that points at
+   the IP, so no domain has to be bought. Run the same command to deploy an
+   update.
+
+To use your own domain instead, point it at the IP and pass it:
+`SITE_ADDRESS=omniai.example.org bash scripts/deploy_oracle.sh 203.0.113.9`.
+
+## Hugging Face Spaces (needs a PRO subscription)
 
 The repository's `Dockerfile` is a Space-ready image: it listens on 7860, runs
 as uid 1000, fetches every model from the Hub while building, proves each one
 loads with the network off, and pre-loads them all at startup.
+
+Hugging Face now reserves Docker Spaces on its CPU hardware for PRO accounts;
+creating one on a free account is refused with `402 Payment Required`. With
+PRO, the steps below publish the same image.
 
 1. Log in once, with a token that has **write** access
    (create one at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)):
@@ -83,7 +124,8 @@ with the memory.
 
 | Platform | Profile | Notes |
 |---|---|---|
-| Hugging Face Spaces | **paper** | Free CPU tier is enough. See above. |
+| Oracle Cloud Always Free (Ampere A1) | **paper** | 4 cores and 24 GB at no cost. See above. |
+| Hugging Face Spaces | paper | Docker Spaces need a PRO subscription. |
 | A VM or dedicated server | paper | 8 GB of memory or more. See the proxy section below. |
 | Google Cloud Run | paper | 8 GiB memory, `--min-instances 1` if the rate limiter should hold. |
 | Fly.io, Render, Railway | paper on an 8 GB plan, or lite | Their free tiers are too small for the paper's models. |
